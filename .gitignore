@@ -65,3 +65,8 @@ pnpm-debug.log*
 tmp/
 temp/
 uploads/
+
+dist-admin/
+dist-rider/
+dist-customer/
+
