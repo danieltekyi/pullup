@@ -1,0 +1,6 @@
+# Cloudflare Pages config — admin app
+# Deployed via GitHub Actions with `--project-name pullup-admin`
+
+name = "pullup-admin"
+compatibility_date = "2024-08-01"
+pages_build_output_dir = "apps/frontend/dist-admin"

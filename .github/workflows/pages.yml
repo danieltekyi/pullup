@@ -1,0 +1,60 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/frontend/**'
+      - 'packages/shared/**'
+      - 'wrangler.*.toml'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: admin
+            project: pullup-admin
+          - mode: rider
+            project: pullup-rider
+          - mode: customer
+            project: pullup-customer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: npm run shared:build
+
+      - name: Build ${{ matrix.mode }}
+        working-directory: apps/frontend
+        env:
+          VITE_APP_MODE: ${{ matrix.mode }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_APP_CLIENT_ID: ${{ secrets.VITE_COGNITO_APP_CLIENT_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+        run: npx vite build
+
+      - name: Deploy to Cloudflare Pages (${{ matrix.project }})
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/frontend/dist-${{ matrix.mode }} --project-name=${{ matrix.project }} --branch=main

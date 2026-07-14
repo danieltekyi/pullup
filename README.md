@@ -65,6 +65,34 @@ npx cdk bootstrap aws://<ACCOUNT>/<REGION>   # once per account
 npm run deploy:dev
 ```
 
+## Deployment options
+
+- **Backend** — AWS via CDK: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- **Frontend (Cloudflare Pages)** — three subdomains of `aegisassetllc.com`: [docs/CLOUDFLARE_PAGES.md](docs/CLOUDFLARE_PAGES.md)
+
+### Three-site architecture
+
+The `apps/frontend` codebase compiles into three separate builds — one per audience — controlled by `VITE_APP_MODE`:
+
+| Site | Domain | Mode |
+| --- | --- | --- |
+| Admin console | `pullup.aegisassetllc.com` | `VITE_APP_MODE=admin` |
+| Rider PWA | `pulluprider.aegisassetllc.com` | `VITE_APP_MODE=rider` |
+| Public customer | `pullupcustomer.aegisassetllc.com` | `VITE_APP_MODE=customer` |
+
+Each build only ships the code that audience needs — the rider domain never serves admin routes, the customer domain never loads Cognito auth.
+
+```bash
+# Local
+npm run frontend:dev              # admin (default)
+npm --workspace=@pullup/frontend run dev:rider
+npm --workspace=@pullup/frontend run dev:customer
+
+# Build all three
+npm --workspace=@pullup/frontend run build:all
+# → apps/frontend/dist-admin/  dist-rider/  dist-customer/
+```
+
 ## Testing
 
 ```bash

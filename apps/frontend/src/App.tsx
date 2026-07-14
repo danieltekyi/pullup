@@ -24,27 +24,21 @@ import SettingsPage from './pages/SettingsPage'
 import AuditPage from './pages/AuditPage'
 import TrackPage from './pages/TrackPage'
 import RiderHome from './pages/rider/RiderHome'
+import CustomerLanding from './pages/customer/CustomerLanding'
+import CustomerLookup from './pages/customer/CustomerLookup'
 
-function AppShell() {
+type AppMode = 'admin' | 'rider' | 'customer'
+const APP_MODE: AppMode = (import.meta.env.VITE_APP_MODE as AppMode) ?? 'admin'
+
+function AdminApp() {
   const { user } = useAuth()
-
-  useEffect(() => {
-    startOnlineListener()
-  }, [])
-
+  useEffect(() => { startOnlineListener() }, [])
   return (
     <>
       <ToastViewport />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/track" element={<TrackPage />} />
-
-        {/* Rider mobile app */}
-        <Route element={<RiderOnlyRoute />}>
-          <Route path="/rider" element={<RiderHome />} />
-        </Route>
-
-        {/* Admin (managers + super-admins) */}
         <Route element={<ProtectedRoute />}>
           <Route element={<LayoutWithSidebar />}>
             <Route path="/" element={<DashboardPage />} />
@@ -63,21 +57,60 @@ function AppShell() {
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Route>
-
         <Route path="*" element={<Navigate to={user?.role === 'rider' ? '/rider' : '/'} replace />} />
       </Routes>
     </>
   )
 }
 
-export default function App() {
+function RiderApp() {
+  useEffect(() => { startOnlineListener() }, [])
   return (
-    <AuthProvider>
-      <PermissionsProvider>
-        <BrowserRouter>
-          <AppShell />
-        </BrowserRouter>
-      </PermissionsProvider>
-    </AuthProvider>
+    <>
+      <ToastViewport />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<RiderOnlyRoute />}>
+          <Route path="/" element={<RiderHome />} />
+          <Route path="/rider" element={<RiderHome />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
+}
+
+function CustomerApp() {
+  return (
+    <>
+      <ToastViewport />
+      <Routes>
+        <Route path="/" element={<CustomerLanding />} />
+        <Route path="/track" element={<TrackPage />} />
+        <Route path="/lookup" element={<CustomerLookup />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
+  )
+}
+
+export default function App() {
+  const shell =
+    APP_MODE === 'customer' ? (
+      <BrowserRouter><CustomerApp /></BrowserRouter>
+    ) : APP_MODE === 'rider' ? (
+      <AuthProvider>
+        <PermissionsProvider>
+          <BrowserRouter><RiderApp /></BrowserRouter>
+        </PermissionsProvider>
+      </AuthProvider>
+    ) : (
+      <AuthProvider>
+        <PermissionsProvider>
+          <BrowserRouter><AdminApp /></BrowserRouter>
+        </PermissionsProvider>
+      </AuthProvider>
+    )
+  return shell
 }
