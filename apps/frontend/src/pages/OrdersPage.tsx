@@ -1,0 +1,268 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Search, Filter, Download, Upload, RefreshCw, X } from 'lucide-react'
+import type { Order, OrderStatus } from '@pullup/shared'
+import { api, apiErrorMessage } from '../services/api'
+import { Badge, Button, Card, Field, Input, Select, StatusBadge, Table, toast } from '../components/ui'
+
+const STATUS_OPTIONS: OrderStatus[] = [
+  'pending',
+  'assigned',
+  'picked_up',
+  'in_transit',
+  'delivered',
+  'awaiting_confirmation',
+  'confirmed',
+  'rejected',
+  'failed',
+  'cancelled',
+]
+
+export default function OrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(false)
+  const [q, setQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [cursor, setCursor] = useState<string | undefined>()
+  const [nextCursor, setNextCursor] = useState<string | undefined>()
+
+  async function load() {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (q) params.set('q', q)
+      if (statusFilter) params.set('status', statusFilter)
+      if (from) params.set('from', from)
+      if (to) params.set('to', to)
+      if (cursor) params.set('cursor', cursor)
+      const res = await api.get<{ items: Order[]; cursor?: string }>(`/api/orders?${params}`)
+      setOrders(res.data.items)
+      setNextCursor(res.data.cursor)
+    } catch (err) {
+      toast.error(apiErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [statusFilter, from, to, cursor])
+
+  const selectedIds = useMemo(() => [...selected], [selected])
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  }
+
+  async function bulkAssign() {
+    if (!selectedIds.length) return toast.warning('Select orders first')
+    const riderId = window.prompt('Rider ID to assign?') ?? ''
+    if (!riderId) return
+    try {
+      await api.post('/api/orders/bulk-assign', { orderIds: selectedIds, riderId })
+      toast.success(`Assigned ${selectedIds.length} orders`)
+      setSelected(new Set())
+      load()
+    } catch (err) {
+      toast.error(apiErrorMessage(err))
+    }
+  }
+
+  function exportCsv() {
+    window.open(`${import.meta.env.VITE_API_URL || ''}/api/orders/export.csv`, '_blank')
+  }
+
+  async function uploadCsv(file: File) {
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post<{ imported: number }>('/api/orders/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      toast.success(`Imported ${res.data.imported} orders`)
+      load()
+    } catch (err) {
+      toast.error(apiErrorMessage(err))
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Orders</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage and dispatch deliveries</p>
+        </div>
+        <div className="flex gap-2">
+          <label className="btn btn-secondary btn-md cursor-pointer">
+            <Upload size={14} />
+            Import CSV
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => e.target.files?.[0] && uploadCsv(e.target.files[0])}
+            />
+          </label>
+          <Button variant="secondary" icon={<Download size={14} />} onClick={exportCsv}>
+            Export
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <form
+          onSubmit={e => {
+            e.preventDefault()
+            setCursor(undefined)
+            load()
+          }}
+          className="grid grid-cols-1 md:grid-cols-5 gap-3"
+        >
+          <Field label="Search">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Customer, ID, phone…" className="pl-9" />
+            </div>
+          </Field>
+          <Field label="Status">
+            <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              {STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="From">
+            <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+          </Field>
+          <Field label="To">
+            <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
+          </Field>
+          <div className="flex items-end gap-2">
+            <Button type="submit" icon={<Filter size={14} />}>Apply</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              icon={<X size={14} />}
+              onClick={() => {
+                setQ(''); setStatusFilter(''); setFrom(''); setTo(''); setCursor(undefined)
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {selectedIds.length > 0 && (
+        <div className="flex items-center justify-between bg-brand-50 border border-brand-100 rounded-lg px-4 py-2.5">
+          <span className="text-sm font-medium text-brand-700">{selectedIds.length} selected</span>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={bulkAssign}>Bulk assign</Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
+          </div>
+        </div>
+      )}
+
+      <Table
+        loading={loading}
+        rows={orders}
+        rowKey={o => o.id}
+        emptyMessage="No orders match those filters"
+        columns={[
+          {
+            key: 'sel',
+            width: 40,
+            header: (
+              <input
+                type="checkbox"
+                checked={orders.length > 0 && orders.every(o => selected.has(o.id))}
+                onChange={e => {
+                  setSelected(e.target.checked ? new Set(orders.map(o => o.id)) : new Set())
+                }}
+              />
+            ),
+            render: o => (
+              <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} />
+            ),
+          },
+          {
+            key: 'id',
+            header: 'ID',
+            render: o => (
+              <Link to={`/orders/${o.id}`} className="font-mono text-xs text-brand-600 hover:underline">
+                {o.id.slice(0, 20)}
+              </Link>
+            ),
+          },
+          {
+            key: 'customer',
+            header: 'Customer',
+            render: o => (
+              <div>
+                <p className="font-medium">{o.customerName}</p>
+                {o.customerPhone && <p className="text-xs text-slate-500">{o.customerPhone}</p>}
+              </div>
+            ),
+          },
+          {
+            key: 'status',
+            header: 'Status',
+            render: o => (
+              <div className="flex flex-col gap-1">
+                <StatusBadge status={o.status} />
+                {o.partnerId && !o.cost && <Badge variant="amber">Needs pricing</Badge>}
+                {o.priority === 'urgent' && <Badge variant="red">Urgent</Badge>}
+              </div>
+            ),
+          },
+          {
+            key: 'zone',
+            header: 'Destination',
+            render: o => (
+              <div className="text-sm">
+                <p>{o.destination}</p>
+                {o.destinationZone && <p className="text-xs text-slate-500">Zone {o.destinationZone}</p>}
+              </div>
+            ),
+          },
+          {
+            key: 'assigned',
+            header: 'Rider',
+            render: o => <span className="text-sm text-slate-600">{o.assignedTo?.slice(0, 12) || '—'}</span>,
+          },
+          {
+            key: 'cost',
+            header: 'Cost',
+            render: o => <span className="font-semibold">{o.cost ? o.cost.toLocaleString() : '—'}</span>,
+          },
+          {
+            key: 'created',
+            header: 'Created',
+            render: o => <span className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleString()}</span>,
+          },
+        ]}
+      />
+
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" icon={<RefreshCw size={14} />} onClick={() => { setCursor(undefined); load() }}>
+          Refresh
+        </Button>
+        {nextCursor && (
+          <Button variant="secondary" onClick={() => setCursor(nextCursor)}>
+            Load more →
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}

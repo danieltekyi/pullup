@@ -1,0 +1,26 @@
+{
+  "name": "@pullup/infra",
+  "version": "2.0.0",
+  "private": true,
+  "description": "PullUp AWS infrastructure (CDK) — Cognito, DynamoDB, Lambda, API Gateway, S3, CloudFront, WAF, Secrets Manager",
+  "bin": { "infra": "bin/infra.js" },
+  "scripts": {
+    "build": "tsc",
+    "synth": "cdk synth",
+    "diff:dev": "cdk diff --context env=dev",
+    "diff:prod": "cdk diff --context env=prod",
+    "deploy:dev": "cdk deploy --all --context env=dev --require-approval never",
+    "deploy:prod": "cdk deploy --all --context env=prod --require-approval broadening",
+    "destroy:dev": "cdk destroy --all --context env=dev --force"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0",
+    "source-map-support": "^0.5.21"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.11",
+    "aws-cdk": "^2.150.0",
+    "typescript": "^5.5.4"
+  }
+}

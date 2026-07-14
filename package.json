@@ -1,0 +1,55 @@
+{
+  "name": "pullup",
+  "version": "2.0.0",
+  "private": true,
+  "description": "PullUp — production-grade delivery management platform (React PWA + serverless AWS backend)",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "infra/*",
+    "e2e"
+  ],
+  "scripts": {
+    "backend:dev": "npm run dev --workspace=@pullup/backend",
+    "backend:build": "npm run build --workspace=@pullup/backend",
+    "backend:test": "npm run test --workspace=@pullup/backend",
+    "frontend:dev": "npm run dev --workspace=@pullup/frontend",
+    "frontend:build": "npm run build --workspace=@pullup/frontend",
+    "frontend:test": "npm run test --workspace=@pullup/frontend",
+    "shared:build": "npm run build --workspace=@pullup/shared",
+    "infra:synth": "npm run synth --workspace=@pullup/infra",
+    "infra:deploy:dev": "npm run deploy:dev --workspace=@pullup/infra",
+    "infra:deploy:prod": "npm run deploy:prod --workspace=@pullup/infra",
+    "e2e": "npm run test --workspace=@pullup/e2e",
+    "lint": "eslint \"apps/**/src/**/*.{ts,tsx}\" \"packages/**/src/**/*.ts\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run shared:build && npm run backend:build && npm run frontend:build",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml}\"",
+    "prepare": "husky install || true"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.34.4",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "husky": "^9.1.4",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,yml}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
