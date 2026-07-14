@@ -1,22 +1,45 @@
-name: Deploy to Cloudflare Pages
+name: Deploy to Cloudflare (Pages + Worker)
 
 on:
   push:
     branches: [main]
     paths:
       - 'apps/frontend/**'
+      - 'apps/api/**'
       - 'packages/shared/**'
       - 'wrangler.*.toml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  api:
+    name: Deploy API Worker
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run shared:build
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: deploy
+
+  pages:
+    name: Deploy ${{ matrix.mode }} to Pages
+    runs-on: ubuntu-latest
+    needs: api
     strategy:
       fail-fast: false
       matrix:
@@ -29,26 +52,18 @@ jobs:
             project: pullup-customer
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build shared
-        run: npm run shared:build
+      - run: npm ci
+      - run: npm run shared:build
 
       - name: Build ${{ matrix.mode }}
         working-directory: apps/frontend
         env:
           VITE_APP_MODE: ${{ matrix.mode }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
-          VITE_COGNITO_USER_POOL_ID: ${{ secrets.VITE_COGNITO_USER_POOL_ID }}
-          VITE_COGNITO_APP_CLIENT_ID: ${{ secrets.VITE_COGNITO_APP_CLIENT_ID }}
+          VITE_API_URL: https://api.aegisassetllc.com
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: npx vite build
 

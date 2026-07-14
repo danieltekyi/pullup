@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
@@ -49,7 +49,6 @@ const NAV: NavItem[] = [
 export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
   const { user, logout } = useAuth()
   const { canSeeMenu } = usePermissions()
-  const navigate = useNavigate()
 
   const items = NAV.filter(item => canSeeMenu(item.key))
 
@@ -108,9 +107,8 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
             </div>
           )}
           <button
-            onClick={async () => {
-              await logout()
-              navigate('/login')
+            onClick={() => {
+              logout()
             }}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
           >

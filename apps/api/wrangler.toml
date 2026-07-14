@@ -1,0 +1,54 @@
+name = "pullup-api"
+main = "src/index.ts"
+compatibility_date = "2024-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain will be bound in Cloudflare dashboard to api.aegisassetllc.com
+[[routes]]
+pattern = "api.aegisassetllc.com/*"
+custom_domain = true
+
+# --------------------------------------------------------------------
+# Bindings (fill IDs after `wrangler d1 create` / `wrangler r2 bucket create`)
+# --------------------------------------------------------------------
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pullup"
+database_id = "PLACEHOLDER_D1_ID"       # replace after `wrangler d1 create pullup`
+migrations_dir = "src/db/migrations"
+
+[[r2_buckets]]
+binding = "PROOF_BUCKET"
+bucket_name = "pullup-proof"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "PLACEHOLDER_KV_ID"                # replace after `wrangler kv namespace create pullup-kv`
+
+# Poll active partner endpoints every 5 minutes (see scheduledPartnerFetch)
+[triggers]
+crons = ["*/5 * * * *"]
+
+# --------------------------------------------------------------------
+# Variables (safe to commit)
+# --------------------------------------------------------------------
+
+[vars]
+FRONTEND_ADMIN_URL    = "https://pullup.aegisassetllc.com"
+FRONTEND_RIDER_URL    = "https://pulluprider.aegisassetllc.com"
+FRONTEND_CUSTOMER_URL = "https://pullupcustomer.aegisassetllc.com"
+ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com"
+CF_ACCESS_TEAM_DOMAIN = "aegis.cloudflareaccess.com"
+CF_ACCESS_AUD         = "PLACEHOLDER_AUD"     # replace with the Application Audience Tag from Access
+
+# --------------------------------------------------------------------
+# Secrets (do NOT commit — set with `wrangler secret put NAME`)
+# --------------------------------------------------------------------
+# TRACKER_LINK_SECRET       — 64+ chars for tracker JWT signing
+# FROM_EMAIL                — sender email (optional)
+# AT_USERNAME, AT_API_KEY   — Africa's Talking SMS
+# TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM
+# VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
+# GOOGLE_MAPS_API_KEY
+# TRACKER_API_URL, TRACKER_API_KEY

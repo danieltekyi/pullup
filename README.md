@@ -1,78 +1,75 @@
 # PullUp
 
-<p align="center">
-  <strong>Premium delivery-management platform for bike/motorcycle courier businesses.</strong><br />
-  Multi-branch • Offline-first PWA • Partner APIs • WhatsApp / SMS / Email • CDK-deployable
-</p>
+Production-grade delivery management platform. **100% Cloudflare** — Pages for
+three role-specific frontends, Workers for the API, D1 for storage, R2 for
+proof-of-delivery images, Access for zero-trust auth.
 
-<p align="center">
-  <a href="#quick-start"><strong>Quick start</strong></a> ·
-  <a href="docs/ARCHITECTURE.md">Architecture</a> ·
-  <a href="docs/DEPLOYMENT.md">Deployment</a> ·
-  <a href="SECURITY.md">Security</a>
-</p>
+## Architecture
 
----
+```
+┌────────────────────────────┐  ┌────────────────────────────┐  ┌────────────────────────────┐
+│  pullup.aegisassetllc.com  │  │ pulluprider.aegisassetllc..│  │pullupcustomer.aegisassetll.│
+│  Admin console             │  │  Rider PWA                 │  │  Public landing + tracking │
+│  Pages · behind Access     │  │  Pages · behind Access     │  │  Pages · public            │
+└─────────────┬──────────────┘  └─────────────┬──────────────┘  └─────────────┬──────────────┘
+              │                                │                              │
+              └───────┬────────────────────────┴─────────────────┬────────────┘
+                      │                                          │
+                      ▼                                          ▼
+        ┌────────────────────────────────┐   ┌────────────────────────────────┐
+        │  api.aegisassetllc.com         │   │ Cloudflare Access (Zero Trust) │
+        │  Cloudflare Workers · Hono     │──▶│  Google / OTP / GitHub login   │
+        │  Cf-Access-Jwt-Assertion       │◀──│  Groups: admins, riders        │
+        └────────────┬───────────────────┘   └────────────────────────────────┘
+                     │
+                     ├─────▶ D1 (SQLite, 14 tables, indexed)
+                     ├─────▶ R2 (proof-of-delivery images)
+                     ├─────▶ KV (session bits, tracker cache)
+                     └─────▶ MailChannels / Africa's Talking / Twilio
+```
 
 ## What's inside
 
 | Package | Purpose |
 | --- | --- |
-| `apps/backend` | Express + Lambda API — hardened Cognito JWTs, DynamoDB with GSIs, S3 proof-of-delivery, per-action idempotent sync, rate limiting, structured logging |
-| `apps/frontend` | React 18 + Vite + Tailwind PWA — admin console, dedicated **rider mobile app**, offline queue, Web Push, Sentry |
+| `apps/api` | Hono on Cloudflare Workers — verifies Access JWT, all business logic |
+| `apps/frontend` | React + Tailwind PWA — builds three modes: admin / rider / customer |
 | `packages/shared` | Cross-package types, permission model, physics pricing engine |
-| `infra/cdk` | 4-stack CDK (data + auth + api + web) with WAF, CloudFront, PITR, Secrets Manager |
 | `e2e` | Playwright smoke tests |
 
 ## Feature highlights
 
-- **Order lifecycle** — pending → assigned → picked up → in transit → delivered → confirmed, with a full audit event log per order
-- **Rider PWA** — one-tap actions, signature capture, camera proof, GPS breadcrumbs, offline queue with per-action reconciliation
-- **Customer notifications** — Email (SMTP), SMS (Africa's Talking), WhatsApp (Twilio) — one clean interface per channel
+- **Order lifecycle** — pending → assigned → picked up → in transit → delivered → confirmed, with an audit event log per order
+- **Rider PWA** — one-tap actions, signature capture, camera proof (uploaded to R2), GPS breadcrumbs, offline queue with per-action reconciliation
+- **Customer notifications** — Email (MailChannels), SMS (Africa's Talking), WhatsApp (Twilio) — pluggable
 - **Web Push** for rider assignment alerts
-- **Partner API ingestion** — polls partner GET endpoints, pushes status back via PUT callbacks
-- **Two pricing engines** — bidirectional zone-rate matrix and a physics-based cost model (fuel, wear, load, terrain, margin)
+- **Partner API ingestion** — Worker cron polls active partners every 5 min, pushes status back via PUT callbacks
+- **Two pricing engines** — bidirectional zone-rate matrix and a physics-based cost model
 - **COD reconciliation**, failed-delivery reasons, SLA fields, priority flags
-- **Multi-branch RBAC** — Cognito groups + per-role permission matrix
-- **CSV import/export**, filters, search, pagination
-- **Optimistic-concurrency writes** — no more clobbered updates
-- **Infra as code** — every AWS resource in CDK; `cdk deploy` gives a working stack from scratch
+- **Multi-branch RBAC** — first sign-in becomes super-admin, others default to rider
+- **CSV import/export**, filters, search, cursor pagination
+- **Optimistic-concurrency writes** via `version` column
+- **Zero-trust auth** — Cloudflare Access handles login; nothing to build or maintain
+- **Public tracker** — signed JWT link works via customer subdomain without auth
 
 ## Quick start
 
 ```bash
-# 1. Install
-git clone https://github.com/Stekyi/pullup.git
+git clone https://github.com/danieltekyi/pullup.git
 cd pullup
 npm install
 npm run shared:build
 
-# 2. Configure
-cp apps/backend/.env.example apps/backend/.env       # fill in Cognito + AWS
-cp apps/frontend/.env.example apps/frontend/.env     # fill in Cognito + API URL
-
-# 3. Run locally (two terminals)
-npm run backend:dev    # http://localhost:3000
+# Local dev
+npm run api:dev        # http://localhost:8787 (Miniflare + local D1)
 npm run frontend:dev   # http://localhost:5173
+
+# Deploy — see docs/CLOUDFLARE_PAGES.md
 ```
 
-Deploy to AWS:
+## Three-site build
 
-```bash
-cd infra/cdk
-npm install
-npx cdk bootstrap aws://<ACCOUNT>/<REGION>   # once per account
-npm run deploy:dev
-```
-
-## Deployment options
-
-- **Backend** — AWS via CDK: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- **Frontend (Cloudflare Pages)** — three subdomains of `aegisassetllc.com`: [docs/CLOUDFLARE_PAGES.md](docs/CLOUDFLARE_PAGES.md)
-
-### Three-site architecture
-
-The `apps/frontend` codebase compiles into three separate builds — one per audience — controlled by `VITE_APP_MODE`:
+The `apps/frontend` codebase compiles into three separate builds:
 
 | Site | Domain | Mode |
 | --- | --- | --- |
@@ -80,46 +77,23 @@ The `apps/frontend` codebase compiles into three separate builds — one per aud
 | Rider PWA | `pulluprider.aegisassetllc.com` | `VITE_APP_MODE=rider` |
 | Public customer | `pullupcustomer.aegisassetllc.com` | `VITE_APP_MODE=customer` |
 
-Each build only ships the code that audience needs — the rider domain never serves admin routes, the customer domain never loads Cognito auth.
-
-```bash
-# Local
-npm run frontend:dev              # admin (default)
-npm --workspace=@pullup/frontend run dev:rider
-npm --workspace=@pullup/frontend run dev:customer
-
-# Build all three
-npm --workspace=@pullup/frontend run build:all
-# → apps/frontend/dist-admin/  dist-rider/  dist-customer/
-```
+Each build only ships the code that audience needs.
 
 ## Testing
 
 ```bash
-npm test            # all unit tests (backend + frontend)
-npm run e2e         # Playwright smoke tests (needs a running app)
+npm test
 npm run typecheck
 npm run lint
 ```
 
-## Structure
+## Documentation
 
-```
-pullup/
-├── apps/
-│   ├── backend/            Express + Lambda API
-│   └── frontend/           React PWA (admin + rider)
-├── packages/
-│   └── shared/             Types, permissions, physics engine
-├── infra/cdk/              AWS infrastructure
-├── e2e/                    Playwright tests
-├── docs/                   Architecture + deployment guides
-└── .github/workflows/      CI + Deploy + CodeQL
-```
-
-## Security
-
-Full details in [SECURITY.md](SECURITY.md). Never commit `.env` files. Rotate leaked secrets immediately — see [SECRETS_ROTATION.md](SECRETS_ROTATION.md).
+- [docs/CLOUDFLARE_PAGES.md](docs/CLOUDFLARE_PAGES.md) — end-to-end deploy
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how it fits together
+- [SECURITY.md](SECURITY.md) — controls in place
+- [apps/api/README.md](apps/api/README.md) — API dev + deploy
+- [apps/frontend/README.md](apps/frontend/README.md) — frontend dev + build
 
 ## License
 

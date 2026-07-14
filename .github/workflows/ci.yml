@@ -35,13 +35,13 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build backend
-        run: npm run backend:build
+      - name: Build API (typecheck only — no bundle)
+        working-directory: apps/api
+        run: npx tsc --noEmit
 
-      - name: Build frontend
-        run: npm run frontend:build
+      - name: Build frontend (admin)
+        working-directory: apps/frontend
         env:
+          VITE_APP_MODE: admin
           VITE_API_URL: https://example.test
-          VITE_COGNITO_REGION: us-east-1
-          VITE_COGNITO_USER_POOL_ID: placeholder
-          VITE_COGNITO_APP_CLIENT_ID: placeholder
+        run: npx vite build

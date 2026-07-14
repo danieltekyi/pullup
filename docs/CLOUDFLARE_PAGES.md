@@ -1,135 +1,210 @@
-# Cloudflare Pages Deployment — Step-by-Step
+# Cloudflare Setup — end-to-end
 
-You'll deploy three sites from **one** GitHub repo to **three** Cloudflare Pages
-projects, each on its own subdomain of `aegisassetllc.com`:
+The whole stack runs on Cloudflare: three Pages sites (admin / rider / customer)
++ one Worker (`pullup-api`) + D1 (SQLite) + R2 (proof-of-delivery images) +
+Cloudflare Access (zero-trust auth).
 
-| Subdomain | Project | Audience | Auth required? |
-| --- | --- | --- | --- |
-| `pullup.aegisassetllc.com` | `pullup-admin` | Managers + super-admins | Yes (Cognito) |
-| `pulluprider.aegisassetllc.com` | `pullup-rider` | Riders (mobile PWA) | Yes (Cognito) |
-| `pullupcustomer.aegisassetllc.com` | `pullup-customer` | Public customers | No |
-| `api.aegisassetllc.com` | (CNAME to AWS API Gateway) | Backend API | — |
+Domain: `aegisassetllc.com` (already on Cloudflare — nameservers set).
+
+## Endpoints
+
+| URL | What |
+| --- | --- |
+| `pullup.aegisassetllc.com` | Admin console (Pages, behind Access) |
+| `pulluprider.aegisassetllc.com` | Rider PWA (Pages, behind Access) |
+| `pullupcustomer.aegisassetllc.com` | Public customer landing + tracking (Pages, public) |
+| `api.aegisassetllc.com` | Workers API (D1 + R2, behind Access with public bypass for tracker) |
 
 ---
 
-## One-time setup
+## 1. Create Cloudflare API token
 
-### 1. Move the domain to Cloudflare (or ensure it's already there)
+Cloudflare dashboard → **My Profile** → **API Tokens** → **Create Token** →
+**Custom token**:
 
-1. Open the Cloudflare dashboard → **Add a Site** → enter `aegisassetllc.com`
-2. Cloudflare will scan existing DNS records — verify nothing is lost
-3. At your **current DNS registrar**, change the nameservers to the two shown by Cloudflare (they look like `xxx.ns.cloudflare.com`)
-4. Wait for Cloudflare to say "Active" — typically 5 min to a few hours
+- **Account permissions**
+  - `Cloudflare Pages` → **Edit**
+  - `Workers Scripts` → **Edit**
+  - `Workers R2 Storage` → **Edit**
+  - `D1` → **Edit**
+  - `Workers KV Storage` → **Edit**
+  - `Access: Apps and Policies` → **Edit**
+- **Zone permissions** for `aegisassetllc.com`:
+  - `Zone` → **Read**
+  - `DNS` → **Edit**
+  - `Workers Routes` → **Edit**
 
-If you already have the domain on Cloudflare, skip to step 2.
+Copy the token; grab your **Account ID** from the right sidebar.
 
-### 2. Create a Cloudflare API token
+## 2. GitHub secrets
 
-Dashboard → **My Profile** → **API Tokens** → **Create Token** → **Custom token** with:
-
-- **Permissions**
-  - `Account` — `Cloudflare Pages` — `Edit`
-  - `Zone` — `Zone` — `Read`
-  - `Zone` — `DNS` — `Edit`
-- **Zone Resources** — `Include` — `Specific zone` — `aegisassetllc.com`
-- **Account Resources** — `Include` — your account
-- **TTL** — no expiry (or 1 year, up to you)
-
-Copy the token immediately — Cloudflare shows it once.
-
-Also grab your **Account ID** from the right sidebar of any Cloudflare page.
-
-### 3. Add GitHub secrets
-
-Go to https://github.com/danieltekyi/pullup/settings/secrets/actions and add:
+At https://github.com/danieltekyi/pullup/settings/secrets/actions:
 
 | Secret | Value |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | the token from step 2 |
-| `CLOUDFLARE_ACCOUNT_ID` | your Cloudflare account ID |
-| `VITE_API_URL` | `https://api.aegisassetllc.com` (or the API Gateway URL if you haven't set up the CNAME yet) |
-| `VITE_COGNITO_REGION` | e.g. `us-east-1` |
-| `VITE_COGNITO_USER_POOL_ID` | from `cdk deploy --all` output |
-| `VITE_COGNITO_APP_CLIENT_ID` | from `cdk deploy --all` output |
+| `CLOUDFLARE_API_TOKEN` | (from step 1) |
+| `CLOUDFLARE_ACCOUNT_ID` | (from step 1) |
 | `VITE_SENTRY_DSN` | optional |
 
-### 4. Create the three Pages projects
+That's it — no Cognito, no AWS.
 
-For each of `pullup-admin`, `pullup-rider`, `pullup-customer`:
+## 3. Provision the D1 database, R2 bucket, KV namespace
 
-1. Cloudflare dashboard → **Workers & Pages** → **Create application** → **Pages** → **Direct upload** (we're using GitHub Actions for the actual deploy, not Cloudflare's built-in Git integration — that gives us the split-build behavior)
-2. Name: `pullup-admin` (or `pullup-rider` / `pullup-customer`)
-3. Click **Create**, then close — the first real deploy will populate it.
-
-### 5. First deploy
-
-Push any commit to `main`:
+Locally, once:
 
 ```bash
-git commit --allow-empty -m "chore: trigger initial pages deploy"
-git push
+cd apps/api
+npm install
+npx wrangler login
+
+# D1
+npx wrangler d1 create pullup
+# Note the `database_id` — paste into apps/api/wrangler.toml (replace PLACEHOLDER_D1_ID)
+
+# R2
+npx wrangler r2 bucket create pullup-proof
+
+# KV
+npx wrangler kv namespace create pullup-kv
+# Paste the id into wrangler.toml (replace PLACEHOLDER_KV_ID)
+
+# Apply schema + seed
+npm run db:apply:remote
+
+# Secrets
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))" | npx wrangler secret put TRACKER_LINK_SECRET
+
+# Optional integrations
+echo "..." | npx wrangler secret put AT_USERNAME
+echo "..." | npx wrangler secret put AT_API_KEY
+echo "..." | npx wrangler secret put TWILIO_ACCOUNT_SID
+echo "..." | npx wrangler secret put TWILIO_AUTH_TOKEN
+echo "..." | npx wrangler secret put TWILIO_WHATSAPP_FROM
+
+# For push notifications — generate once with `npx web-push generate-vapid-keys`
+echo "<public>"  | npx wrangler secret put VAPID_PUBLIC_KEY
+echo "<private>" | npx wrangler secret put VAPID_PRIVATE_KEY
+echo "mailto:ops@aegisassetllc.com" | npx wrangler secret put VAPID_SUBJECT
 ```
 
-Watch the **Deploy to Cloudflare Pages** workflow in the GitHub Actions tab.
-When all three matrix jobs go green, your sites are live on the default
-`*.pages.dev` domains, e.g. `pullup-admin.pages.dev`.
+Commit `wrangler.toml` with the real database_id and KV id (they're not secrets).
 
-### 6. Bind the custom subdomains
+## 4. First deploy of the API Worker
 
-In Cloudflare dashboard, for each Pages project:
-
-1. Project → **Custom domains** → **Set up a custom domain**
-2. Enter the domain:
-   - `pullup-admin` → `pullup.aegisassetllc.com`
-   - `pullup-rider` → `pulluprider.aegisassetllc.com`
-   - `pullup-customer` → `pullupcustomer.aegisassetllc.com`
-3. Cloudflare auto-creates the CNAME and provisions a TLS cert
-
-Done. Each subdomain will be live within ~1 minute.
-
-### 7. Point `api.aegisassetllc.com` at AWS API Gateway
-
-In Cloudflare dashboard → **DNS** → **Records**:
-
-| Type | Name | Content | Proxy status |
-| --- | --- | --- | --- |
-| `CNAME` | `api` | `<api-id>.execute-api.us-east-1.amazonaws.com` | ❌ **DNS only** (grey cloud) |
-
-**Do not** proxy the API through Cloudflare (orange cloud) unless you're on a paid plan that supports mTLS pass-through, because API Gateway rejects non-matching Host headers. Grey cloud gives you a friendly domain without breaking the AWS certificate.
-
-**Better option** (recommended for prod): configure a custom domain on API Gateway itself using AWS ACM cert, then CNAME to the API Gateway custom domain — you'll get end-to-end TLS with Cloudflare proxying enabled.
-
-### 8. Update backend CORS
-
-Edit `apps/backend/.env` (or the equivalent Lambda env var) and set:
-
-```
-ALLOWED_ORIGINS=https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com
+```bash
+cd apps/api
+npx wrangler deploy
 ```
 
-Redeploy the backend Lambda.
+Then in Cloudflare dashboard → **Workers & Pages** → `pullup-api`
+→ **Settings** → **Domains & Routes** → **Add** → **Custom domain**
+→ `api.aegisassetllc.com`. TLS is auto-provisioned.
 
----
+## 5. Set up Cloudflare Access (Zero Trust)
 
-## After setup — every push to main
+1. Cloudflare dashboard → **Zero Trust** → free plan (no payment required for < 50 users)
+2. **Settings** → **Authentication** → add a login method:
+   - **Google** (recommended if your team has Gmail / Google Workspace)
+   - **One-time PIN** (fallback for riders without Google — sends email code)
+   - **GitHub** (optional for devs)
+3. **Access** → **Access Groups** → **Add a group**:
+   - Name: `pullup-admins`, include: emails ending in `@aegisassetllc.com` (or specific emails)
+   - Name: `pullup-riders`, include: rider email addresses
+4. **Access** → **Applications** → **Add an application** → **Self-hosted**:
 
-1. GitHub Action runs `pages.yml`
-2. Builds all three modes in parallel
-3. Deploys each to its Cloudflare Pages project
-4. Subdomains update automatically — no DNS changes needed after the initial setup
+   **App 1 — Admin**
+   - Application name: `PullUp Admin`
+   - Session duration: `24 hours`
+   - Application domain: `pullup.aegisassetllc.com`
+   - Identity providers: your chosen ones
+   - Policy: **Allow** — Include: `pullup-admins` group
+
+   **App 2 — Rider**
+   - Application name: `PullUp Rider`
+   - Session duration: `30 days` (long-lived so mobile PWA doesn't re-auth constantly)
+   - Application domain: `pulluprider.aegisassetllc.com`
+   - Policy: **Allow** — Include: `pullup-riders` group
+
+   **App 3 — API**
+   - Application name: `PullUp API`
+   - Session duration: `24 hours`
+   - Application domain: `api.aegisassetllc.com`
+   - **Add path rule** → Path: `/api/tracker/validate` → **Bypass** (public tracker validation)
+   - **Add path rule** → Path: `/api/tracker/proxy` → **Bypass**
+   - **Add path rule** → Path: `/health` → **Bypass**
+   - Policy: **Allow** — Include: both `pullup-admins` and `pullup-riders`
+
+5. For each application, copy the **Application Audience (AUD) Tag** from Overview → Application Info.
+6. All three apps share the same AUD prefix — put your team domain and one AUD in `apps/api/wrangler.toml`:
+   ```toml
+   CF_ACCESS_TEAM_DOMAIN = "aegis.cloudflareaccess.com"   # your team subdomain
+   CF_ACCESS_AUD         = "abcd1234..."                   # any one of the three
+   ```
+7. Re-deploy: `cd apps/api && npx wrangler deploy`
+
+## 6. Create the three Pages projects
+
+Cloudflare dashboard → **Workers & Pages** → **Create application** → **Pages** → **Direct upload**. Name each:
+- `pullup-admin`
+- `pullup-rider`
+- `pullup-customer`
+
+Just create them — don't upload anything. The GitHub Action pushes the builds.
+
+## 7. Trigger the deploy
+
+Push to `main`. The workflow at `.github/workflows/pages.yml`:
+1. Deploys the API Worker
+2. Builds all three frontends in parallel with the correct `VITE_APP_MODE`
+3. Deploys each to its Pages project
+
+Check https://github.com/danieltekyi/pullup/actions for progress.
+
+## 8. Bind custom domains
+
+For each Pages project → **Custom domains** → **Set up a custom domain**:
+- `pullup-admin` → `pullup.aegisassetllc.com`
+- `pullup-rider` → `pulluprider.aegisassetllc.com`
+- `pullup-customer` → `pullupcustomer.aegisassetllc.com`
+
+Cloudflare auto-creates the CNAME + TLS cert (about 60 seconds).
+
+## 9. Verify
+
+- Visit `pullupcustomer.aegisassetllc.com` — should load without any login (public landing page)
+- Visit `pullup.aegisassetllc.com` — Cloudflare Access should show its sign-in page
+- Sign in — you'll be redirected to the admin dashboard
+- **First user to sign in becomes super-admin automatically** (see `apps/api/src/middleware/access.ts`); everyone else defaults to `rider` and must be promoted by the super-admin via the Users page
+
+## 10. Promote riders / add managers
+
+Sign in as super-admin → **Users** page → change any user's role. Or manually:
+
+```bash
+cd apps/api
+npx wrangler d1 execute pullup --remote --command "UPDATE users SET role='rider', branch_id='default', rider_id='rdr_XXX' WHERE email='rider@example.com'"
+```
+
+## Cost estimate
+
+For a small business (say < 1000 orders/day, 20 users):
+
+| Service | Tier | Monthly cost |
+| --- | --- | --- |
+| Cloudflare Pages | Free | $0 |
+| Workers (API) | Free tier: 100k requests/day | $0 (until you exceed) |
+| D1 | Free tier: 5M reads, 100k writes/day, 5GB storage | $0 |
+| R2 | Free tier: 10GB storage, 1M Class A ops | $0 |
+| Access (Zero Trust) | Free ≤ 50 users | $0 |
+| DNS + TLS + CDN | Free | $0 |
+| **Total** | | **$0** |
+
+Above the free tiers, Workers Paid ($5/mo) unlocks 10M requests/day and Cron Triggers more frequent than once per minute.
 
 ## Troubleshooting
 
-**Build fails with "VITE_APP_MODE is not defined"** — the `cross-env` binding is missing. `npm install` after the latest package.json.
-
-**Custom domain says "Verifying" for > 10 minutes** — check that Cloudflare is authoritative DNS for the domain (nameservers). If DNS hasn't propagated, verification stalls.
-
-**Rider app shows admin login page** — the build didn't get `VITE_APP_MODE=rider`. Check the GitHub Actions log for that matrix job.
-
-**CORS errors from the frontend** — backend `ALLOWED_ORIGINS` env var is missing the new subdomains. Redeploy the backend Lambda after updating.
-
-**Service worker keeps serving old version** — Cloudflare Pages sets `_headers` to no-cache for `sw.js`, so users should get updates within 1 request cycle. If not, hard-refresh (Ctrl+Shift+R).
-
-## Cost
-
-Cloudflare Pages free tier is generous: **500 builds/month**, unlimited requests, unlimited bandwidth. A single push triggers 3 builds (one per site), so ~166 pushes/month before you hit the paid tier ($20/mo for 5000 builds).
+- **"CF_ACCESS_AUD mismatch" in Worker logs** — check the AUD tag matches the one in the Access application overview.
+- **Rider gets logged out constantly** — increase the Access session duration to 30 days for the rider app.
+- **Push notifications don't work** — VAPID keys not set. Run `npx web-push generate-vapid-keys` and put both keys in Worker secrets.
+- **Partner poll cron not firing** — check `[triggers] crons = ["*/5 * * * *"]` in `wrangler.toml` and that the Worker is deployed.
+- **Customer subdomain shows login** — you accidentally added an Access app for `pullupcustomer.*`. Delete it — that subdomain must be public.
