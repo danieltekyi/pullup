@@ -63,7 +63,7 @@ jobs:
         working-directory: apps/frontend
         env:
           VITE_APP_MODE: ${{ matrix.mode }}
-          VITE_API_URL: https://api.aegisassetllc.com
+          VITE_API_URL: ""
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: npx vite build
 

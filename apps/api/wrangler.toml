@@ -3,10 +3,27 @@ main = "src/index.ts"
 compatibility_date = "2024-08-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domain will be bound in Cloudflare dashboard to api.aegisassetllc.com
+# Bindings and routing
+# --------------------------------------------------------------------
+# The Worker serves the API at api.aegisassetllc.com (direct access) AND
+# under /api/* on each frontend subdomain — same-origin so Cloudflare Access
+# cookies flow naturally. Pages serves everything else on the frontend subdomains.
+
 [[routes]]
-pattern = "api.aegisassetllc.com/*"
+pattern = "api.aegisassetllc.com"
 custom_domain = true
+
+[[routes]]
+pattern = "pullup.aegisassetllc.com/api/*"
+zone_name = "aegisassetllc.com"
+
+[[routes]]
+pattern = "pulluprider.aegisassetllc.com/api/*"
+zone_name = "aegisassetllc.com"
+
+[[routes]]
+pattern = "pullupcustomer.aegisassetllc.com/api/*"
+zone_name = "aegisassetllc.com"
 
 # --------------------------------------------------------------------
 # Bindings (fill IDs after `wrangler d1 create` / `wrangler r2 bucket create`)
@@ -15,16 +32,19 @@ custom_domain = true
 [[d1_databases]]
 binding = "DB"
 database_name = "pullup"
-database_id = "PLACEHOLDER_D1_ID"       # replace after `wrangler d1 create pullup`
+database_id = "f885914c-8932-4b17-9ddc-58a2f8f85fac"
 migrations_dir = "src/db/migrations"
 
-[[r2_buckets]]
-binding = "PROOF_BUCKET"
-bucket_name = "pullup-proof"
+# R2 requires enabling once via https://dash.cloudflare.com/{account}/r2
+# After enabling, uncomment and re-deploy. Proof-of-delivery uploads (routes/orders.ts
+# POST /:id/proof/:kind) return 500 until this is bound.
+# [[r2_buckets]]
+# binding = "PROOF_BUCKET"
+# bucket_name = "pullup-proof"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "PLACEHOLDER_KV_ID"                # replace after `wrangler kv namespace create pullup-kv`
+id = "dc4829795aff4c8fb8bdc7413b78e1c1"
 
 # Poll active partner endpoints every 5 minutes (see scheduledPartnerFetch)
 [triggers]
@@ -39,8 +59,9 @@ FRONTEND_ADMIN_URL    = "https://pullup.aegisassetllc.com"
 FRONTEND_RIDER_URL    = "https://pulluprider.aegisassetllc.com"
 FRONTEND_CUSTOMER_URL = "https://pullupcustomer.aegisassetllc.com"
 ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com"
-CF_ACCESS_TEAM_DOMAIN = "aegis.cloudflareaccess.com"
-CF_ACCESS_AUD         = "PLACEHOLDER_AUD"     # replace with the Application Audience Tag from Access
+CF_ACCESS_TEAM_DOMAIN = "aegis-dashboard.cloudflareaccess.com"
+# Three AUDs (comma-separated), one per Access application — token can carry any.
+CF_ACCESS_AUD         = "224159b5912326257bc0ee012f7727193e3708631f3e70632fc406c646b90111,b58f3ac228de8f6b297ff74c51a442d6402c8163ef9afebc45f08abf77fa1a81,edaa3f63b88305167a606332d1d01a99266748b6d544e02db344d04e5cbadd40"
 
 # --------------------------------------------------------------------
 # Secrets (do NOT commit — set with `wrangler secret put NAME`)

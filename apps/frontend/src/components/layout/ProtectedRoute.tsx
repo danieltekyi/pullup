@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { useAuth } from '../context/AuthContext'
-import { usePermissions } from '../context/PermissionsContext'
+import { useAuth } from '../../context/AuthContext'
+import { usePermissions } from '../../context/PermissionsContext'
 import type { MenuKey } from '@pullup/shared'
 
 interface Props {

@@ -1,5 +1,11 @@
 import axios, { AxiosError } from 'axios'
 
+/**
+ * When the frontend and API share a domain (they do — Worker routes are bound to
+ * /api/* on each frontend subdomain), an empty baseURL yields same-origin requests.
+ * Cloudflare Access cookies flow automatically. For local dev, set VITE_API_URL
+ * to your Miniflare URL.
+ */
 const baseURL = import.meta.env.VITE_API_URL || ''
 
 /**

@@ -37,8 +37,17 @@ export function accessAuth(): MiddlewareHandler<{ Bindings: Env; Variables: AppV
     try {
       const { payload } = await jwtVerify(token, getJwks(c.env.CF_ACCESS_TEAM_DOMAIN), {
         issuer: `https://${c.env.CF_ACCESS_TEAM_DOMAIN}`,
-        audience: c.env.CF_ACCESS_AUD,
       })
+      // AUD may be a single string or an array. Match against any of the AUDs
+      // we accept (comma-separated in env: admin, rider, api). This lets the
+      // same Worker serve calls from any of the three subdomains.
+      const acceptedAuds = c.env.CF_ACCESS_AUD.split(',').map(a => a.trim()).filter(Boolean)
+      const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud].filter(Boolean)
+      const audMatch = tokenAud.some(a => acceptedAuds.includes(String(a)))
+      if (!audMatch) {
+        console.warn('AUD mismatch — token AUD:', tokenAud, 'accepted:', acceptedAuds)
+        return next()
+      }
       const email = String(payload.email || '').toLowerCase()
       if (!email) return next()
 
