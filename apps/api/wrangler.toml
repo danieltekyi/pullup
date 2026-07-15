@@ -35,12 +35,10 @@ database_name = "pullup"
 database_id = "f885914c-8932-4b17-9ddc-58a2f8f85fac"
 migrations_dir = "src/db/migrations"
 
-# R2 requires enabling once via https://dash.cloudflare.com/{account}/r2
-# After enabling, uncomment and re-deploy. Proof-of-delivery uploads (routes/orders.ts
-# POST /:id/proof/:kind) return 500 until this is bound.
-# [[r2_buckets]]
-# binding = "PROOF_BUCKET"
-# bucket_name = "pullup-proof"
+# R2 bucket for proof-of-delivery images (signatures, photos).
+[[r2_buckets]]
+binding = "PROOF_BUCKET"
+bucket_name = "pullup-proof"
 
 [[kv_namespaces]]
 binding = "KV"
