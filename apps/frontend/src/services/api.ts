@@ -6,7 +6,7 @@ import axios, { AxiosError } from 'axios'
  * Cloudflare Access cookies flow automatically. For local dev, set VITE_API_URL
  * to your Miniflare URL.
  */
-const baseURL = import.meta.env.VITE_API_URL || 'https://api.aegisassetllc.com'
+const baseURL = import.meta.env.VITE_API_URL || ''
 
 /**
  * Cloudflare Access handles auth entirely at the edge — the browser gets a
