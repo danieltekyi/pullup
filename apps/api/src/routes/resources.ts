@@ -3,52 +3,14 @@ import { z } from 'zod'
 import type { AppVariables, Env } from '../env'
 import { requireAuth, requireRole } from '../middleware/access'
 import { getBranchFilter } from '../middleware/branchScope'
-import { createRider, findRider, listRiders, softDeleteRider, updateRider } from '../repos/riders'
 import { createVehicle, findVehicle, listVehicles, softDeleteVehicle, updateVehicle } from '../repos/vehicles'
 import { createPartner, deletePartner, findPartner, listPartners, updatePartner } from '../repos/partners'
 import { listCustomers, findCustomer } from '../repos/customers'
 import { fetchFromPartner } from '../services/partnerFetch'
-import { badRequest, notFound } from '../lib/errors'
+import { notFound } from '../lib/errors'
 import { createExpenditure, financeSummary, listExpenditures, softDeleteExpenditure } from '../repos/finance'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
-
-// -------- riders --------
-app.get('/riders', requireAuth(), async c => {
-  const b = getBranchFilter(c)
-  return c.json({ items: await listRiders(c.env, b === '__ALL__' ? undefined : b) })
-})
-app.get('/riders/:id', requireAuth(), async c => {
-  const r = await findRider(c.env, c.req.param('id'))
-  if (!r) throw notFound()
-  return c.json(r)
-})
-const riderSchema = z.object({
-  name: z.string().min(2),
-  phone: z.string().min(6),
-  email: z.string().email().optional(),
-  zone: z.string(),
-  status: z.enum(['active', 'inactive', 'on_delivery']).default('active'),
-  vehicleId: z.string().optional(),
-  ratePerDelivery: z.number().nonnegative().optional(),
-  ratePctOfFee: z.number().min(0).max(100).optional(),
-})
-app.post('/riders', requireAuth(), async c => {
-  const body = riderSchema.parse(await c.req.json())
-  const user = c.get('user')!
-  const rider = await createRider(c.env, { ...body, branchId: user.branchId ?? 'default', managerId: user.sub })
-  return c.json(rider, 201)
-})
-app.put('/riders/:id', requireAuth(), async c => {
-  const body = riderSchema.partial().parse(await c.req.json())
-  const r = await updateRider(c.env, c.req.param('id'), body)
-  if (!r) throw notFound()
-  return c.json(r)
-})
-app.delete('/riders/:id', requireAuth(), async c => {
-  await softDeleteRider(c.env, c.req.param('id'))
-  return c.json({ ok: true })
-})
 
 // -------- fleet (vehicles) --------
 app.get('/fleet', requireAuth(), async c => {

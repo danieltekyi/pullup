@@ -60,6 +60,8 @@ ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.ae
 CF_ACCESS_TEAM_DOMAIN = "aegis-dashboard.cloudflareaccess.com"
 # Three AUDs (comma-separated), one per Access application — token can carry any.
 CF_ACCESS_AUD         = "224159b5912326257bc0ee012f7727193e3708631f3e70632fc406c646b90111,b58f3ac228de8f6b297ff74c51a442d6402c8163ef9afebc45f08abf77fa1a81,edaa3f63b88305167a606332d1d01a99266748b6d544e02db344d04e5cbadd40"
+CF_ACCOUNT_ID         = "e1ae61e9ae55a87ae70b9920e8c54aa5"
+CF_ACCESS_RIDERS_GROUP_ID = "7d0335f7-4422-4bc5-a05d-633271f4477e"
 
 # --------------------------------------------------------------------
 # Secrets (do NOT commit — set with `wrangler secret put NAME`)

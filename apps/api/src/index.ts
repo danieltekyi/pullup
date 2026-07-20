@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import ordersRouter from './routes/orders'
 import syncRouter from './routes/sync'
 import trackerRouter from './routes/tracker'
+import ridersRouter from './routes/riders'
 import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
 
@@ -34,6 +35,7 @@ app.get('/health', c => c.json({ ok: true, service: 'pullup-api', env: c.env.CF_
 app.route('/api/orders', ordersRouter)
 app.route('/api/sync', syncRouter)
 app.route('/api/tracker', trackerRouter)
+app.route('/api/riders', ridersRouter)
 app.route('/api', resourcesRouter)
 app.route('/api', adminRouter)
 

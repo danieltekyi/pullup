@@ -11,6 +11,11 @@ export interface Env {
   ALLOWED_ORIGINS: string
   CF_ACCESS_TEAM_DOMAIN: string
   CF_ACCESS_AUD: string
+  CF_ACCOUNT_ID: string
+  CF_ACCESS_RIDERS_GROUP_ID: string
+
+  // Secrets (set via `wrangler secret put`)
+  CF_API_TOKEN?: string   // for managing Access groups from the Worker
 
   // Secrets (set via `wrangler secret put`)
   TRACKER_LINK_SECRET: string
