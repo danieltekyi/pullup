@@ -21,9 +21,13 @@ export function ProtectedRoute({ requiredMenu, children }: Props) {
     )
   }
   if (!user) {
-    // Go directly to Cloudflare Access login — not the React /login page
-    window.location.href = `https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/login/${window.location.hostname}?redirect_url=${encodeURIComponent('/')}`
-    return null
+    // Redirect to Cloudflare Access login for this domain.
+    // /cdn-cgi/access/login is handled at the Cloudflare edge and shows
+    // the Access login page for pulluprider.* / pullup.*
+    if (typeof window !== 'undefined') {
+      window.location.replace(`/cdn-cgi/access/login${window.location.pathname}`)
+    }
+    return <div className="min-h-screen flex items-center justify-center text-slate-500">Redirecting to login…</div>
   }
   if (requiredMenu && !canSeeMenu(requiredMenu)) return <Navigate to="/" replace />
   if (user.role === 'rider') return <Navigate to="/rider" replace />
@@ -34,9 +38,10 @@ export function RiderOnlyRoute({ children }: { children?: ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>
   if (!user) {
-    // Go directly to Cloudflare Access login
-    window.location.href = `https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/login/${window.location.hostname}?redirect_url=${encodeURIComponent('/')}`
-    return null
+    if (typeof window !== 'undefined') {
+      window.location.replace('/cdn-cgi/access/login/')
+    }
+    return <div className="min-h-screen flex items-center justify-center text-slate-500">Redirecting to login…</div>
   }
   return children ? <>{children}</> : <Outlet />
 }
