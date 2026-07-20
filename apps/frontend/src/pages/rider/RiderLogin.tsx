@@ -18,9 +18,18 @@ export default function RiderLogin({ onSuccess }: Props) {
     if (!identifier.trim()) return
     setLoading(true)
     try {
-      await api.post('/api/rider-auth/request', { identifier: identifier.trim() })
+      const res = await api.post<{ ok: boolean; message: string; _devCode?: string }>(
+        '/api/rider-auth/request',
+        { identifier: identifier.trim() },
+      )
       setPhase('code')
-      toast.info('Code sent — check your phone or email (including spam)')
+      if (res.data._devCode) {
+        // Email not configured — show code directly so you can still test
+        toast.warning(`Email not configured. Your code is: ${res.data._devCode}`)
+        setCode(res.data._devCode)
+      } else {
+        toast.info('Code sent — check your phone or email (including spam)')
+      }
     } catch (err) {
       toast.error(apiErrorMessage(err))
     } finally {

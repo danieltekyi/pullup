@@ -74,24 +74,22 @@ function RiderApp() {
 
   if (!user) {
     return (
-      <BrowserRouter>
+      <>
         <ToastViewport />
         <RiderLogin onSuccess={async (_token, _rider) => { await refresh() }} />
-      </BrowserRouter>
+      </>
     )
   }
 
   return (
     <>
       <ToastViewport />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<RiderHome />} />
-          <Route path="/rider" element={<RiderHome />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <Routes>
+        <Route path="/" element={<RiderHome />} />
+        <Route path="/rider" element={<RiderHome />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </>
   )
 }

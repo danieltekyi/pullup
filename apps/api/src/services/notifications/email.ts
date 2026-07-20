@@ -1,16 +1,49 @@
 import type { Env } from '../../env'
 
 /**
- * MailChannels — free transactional email for Cloudflare Workers.
- * https://developers.cloudflare.com/pages/functions/plugins/mailchannels/
- * No SMTP creds needed on the free path.
+ * Send transactional email.
+ *
+ * Priority:
+ *  1. Resend API  (set RESEND_API_KEY secret via `wrangler secret put RESEND_API_KEY`)
+ *  2. MailChannels (legacy free path — deprecated by MC, may not work)
+ *
+ * Sign up free at https://resend.com — 3 000 emails/month free.
+ * Add your sending domain and set the API key as a Worker secret.
  */
 export async function sendEmail(
   env: Env,
   opts: { to: string; subject: string; html: string; from?: string; fromName?: string },
-): Promise<{ ok: boolean; skipped?: boolean; status?: number }> {
+): Promise<{ ok: boolean; skipped?: boolean; status?: number; error?: string }> {
   const from = opts.from || env.FROM_EMAIL || 'no-reply@pullup.aegisassetllc.com'
   const fromName = opts.fromName || 'PullUp'
+  const fromHeader = `${fromName} <${from}>`
+
+  // --- 1. Resend (preferred) ---
+  if ((env as any).RESEND_API_KEY) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${(env as any).RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromHeader,
+          to: [opts.to],
+          subject: opts.subject,
+          html: opts.html,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      const body = await res.json<any>()
+      if (!res.ok) console.warn('Resend error', body)
+      return { ok: res.ok, status: res.status, error: body?.message }
+    } catch (err) {
+      console.warn('Resend fetch failed', (err as Error).message)
+    }
+  }
+
+  // --- 2. MailChannels fallback ---
   try {
     const res = await fetch('https://api.mailchannels.net/tx/v1/send', {
       method: 'POST',
@@ -23,10 +56,11 @@ export async function sendEmail(
       }),
       signal: AbortSignal.timeout(10_000),
     })
+    if (!res.ok) console.warn('MailChannels status', res.status)
     return { ok: res.ok, status: res.status }
   } catch (err) {
-    console.warn('mailchannels failed', (err as Error).message)
-    return { ok: false }
+    console.warn('MailChannels failed', (err as Error).message)
+    return { ok: false, error: 'Email sending unavailable — set RESEND_API_KEY secret' }
   }
 }
 

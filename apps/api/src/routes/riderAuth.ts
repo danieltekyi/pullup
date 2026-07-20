@@ -69,7 +69,17 @@ app.post('/request', async c => {
   }
 
   console.info({ riderId: rider.id, codeSent: sent, via: isPhone ? 'sms' : 'email' }, 'rider auth code sent')
-  return c.json({ ok: true, message: 'If your account exists, a code has been sent.' })
+
+  // In dev / when email isn't configured: return code in response so you can test without email.
+  // Remove this block (or guard with a DEV flag) before going to production.
+  const isDev = !sent
+  return c.json({
+    ok: true,
+    message: sent
+      ? 'If your account exists, a code has been sent.'
+      : 'Code generated but email delivery failed. Set RESEND_API_KEY secret.',
+    ...(isDev ? { _devCode: code } : {}),
+  })
 })
 
 /**
