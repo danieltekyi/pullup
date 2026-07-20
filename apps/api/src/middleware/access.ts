@@ -35,6 +35,32 @@ function getJwks(teamDomain: string) {
  */
 export function accessAuth(): MiddlewareHandler<{ Bindings: Env; Variables: AppVariables }> {
   return async (c, next) => {
+    // First: try a rider session JWT from the Authorization: Bearer header
+    // (used by riders who authenticated via the custom /api/rider-auth flow,
+    //  not via Cloudflare Access)
+    const authHeader = c.req.header('Authorization') || c.req.header('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const { verifyRiderToken } = await import('../routes/riderAuth')
+        const riderPayload = await verifyRiderToken(c.env, authHeader)
+        if (riderPayload) {
+          c.set('user', {
+            sub: riderPayload.sub,
+            email: riderPayload.email,
+            id: riderPayload.sub,
+            name: riderPayload.name ?? 'Rider',
+            role: riderPayload.role as import('../env').AppUser['role'],
+            status: 'active',
+            branchId: riderPayload.branchId,
+            riderId: riderPayload.riderId,
+          })
+          return next()
+        }
+      } catch {
+        // Not a rider JWT — fall through to Access
+      }
+    }
+
     const token = extractToken(c)
     if (!token) return next()
 

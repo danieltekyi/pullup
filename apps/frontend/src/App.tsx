@@ -24,6 +24,7 @@ import SettingsPage from './pages/SettingsPage'
 import AuditPage from './pages/AuditPage'
 import TrackPage from './pages/TrackPage'
 import RiderHome from './pages/rider/RiderHome'
+import RiderLogin from './pages/rider/RiderLogin'
 import CustomerLanding from './pages/customer/CustomerLanding'
 import CustomerLookup from './pages/customer/CustomerLookup'
 
@@ -64,19 +65,33 @@ function AdminApp() {
 }
 
 function RiderApp() {
+  const { user, loading, refresh } = useAuth()
   useEffect(() => { startOnlineListener() }, [])
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>
+  }
+
+  if (!user) {
+    return (
+      <BrowserRouter>
+        <ToastViewport />
+        <RiderLogin onSuccess={async (_token, _rider) => { await refresh() }} />
+      </BrowserRouter>
+    )
+  }
+
   return (
     <>
       <ToastViewport />
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<RiderOnlyRoute />}>
+      <BrowserRouter>
+        <Routes>
           <Route path="/" element={<RiderHome />} />
           <Route path="/rider" element={<RiderHome />} />
           <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
     </>
   )
 }

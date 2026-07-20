@@ -9,6 +9,7 @@ import ordersRouter from './routes/orders'
 import syncRouter from './routes/sync'
 import trackerRouter from './routes/tracker'
 import ridersRouter from './routes/riders'
+import riderAuthRouter, { verifyRiderToken } from './routes/riderAuth'
 import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
 
@@ -37,6 +38,9 @@ app.use('*', async (c, next) => {
 app.use('*', accessAuth())
 
 app.get('/health', c => c.json({ ok: true, service: 'pullup-api', env: c.env.CF_ACCESS_TEAM_DOMAIN }))
+
+// Public endpoints — no Access needed
+app.route('/api/rider-auth', riderAuthRouter)
 
 app.route('/api/orders', ordersRouter)
 app.route('/api/sync', syncRouter)

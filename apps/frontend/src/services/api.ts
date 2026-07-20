@@ -21,7 +21,16 @@ const baseURL = import.meta.env.VITE_API_URL || ''
 export const api = axios.create({
   baseURL,
   timeout: 20_000,
-  withCredentials: true,  // sends CF_Authorization cookie cross-origin
+  withCredentials: true,
+})
+
+// Attach rider session token from localStorage if present
+api.interceptors.request.use(config => {
+  try {
+    const token = localStorage.getItem('rider_session')
+    if (token) config.headers.set('Authorization', `Bearer ${token}`)
+  } catch { /* localStorage may not be available */ }
+  return config  // sends CF_Authorization cookie cross-origin
 })
 
 api.interceptors.response.use(
