@@ -6,7 +6,7 @@ import axios, { AxiosError } from 'axios'
  * Cloudflare Access cookies flow automatically. For local dev, set VITE_API_URL
  * to your Miniflare URL.
  */
-const baseURL = import.meta.env.VITE_API_URL || ''
+const baseURL = import.meta.env.VITE_API_URL || 'https://api.aegisassetllc.com'
 
 /**
  * Cloudflare Access handles auth entirely at the edge — the browser gets a
@@ -21,7 +21,7 @@ const baseURL = import.meta.env.VITE_API_URL || ''
 export const api = axios.create({
   baseURL,
   timeout: 20_000,
-  withCredentials: true,
+  withCredentials: true,  // sends CF_Authorization cookie cross-origin
 })
 
 api.interceptors.response.use(

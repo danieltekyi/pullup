@@ -19,11 +19,17 @@ app.use('*', secureHeaders())
 app.use('*', async (c, next) => {
   const origins = c.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
   const corsMw = cors({
-    origin: origins,
+    origin: (origin, _c) => {
+      // Allow requests from our three Pages subdomains AND
+      // from aegis-dashboard.cloudflareaccess.com (for Access redirects)
+      if (!origin) return '*'
+      if (origins.includes(origin) || origin.endsWith('.cloudflareaccess.com')) return origin
+      return origins[0] // fallback to first allowed origin
+    },
     credentials: true,
-    allowHeaders: ['Content-Type', 'Authorization', 'Cf-Access-Jwt-Assertion'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Cf-Access-Jwt-Assertion', 'Cookie'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    maxAge: 3600,
+    maxAge: 86400,
   })
   return corsMw(c, next)
 })

@@ -26,6 +26,10 @@ function getJwks(teamDomain: string) {
  * `Cf-Access-Jwt-Assertion` header (or CF_Authorization cookie) on every
  * request that passed through an Access policy.
  *
+ * For cross-origin requests (frontend on pulluprider.* → API on api.*),
+ * Cloudflare does NOT inject the header, so we also read from the
+ * CF_Authorization cookie which the browser sends with credentials: 'include'.
+ *
  * Loads the DB user profile and populates c.get('user').
  * Silent-pass when no token — downstream `requireAuth` produces the 401.
  */
@@ -63,8 +67,11 @@ export function accessAuth(): MiddlewareHandler<{ Bindings: Env; Variables: AppV
 }
 
 function extractToken(c: AppContext): string | undefined {
+  // 1. Cf-Access-Jwt-Assertion header — injected by Access for same-domain requests
   const header = c.req.header('Cf-Access-Jwt-Assertion') || c.req.header('cf-access-jwt-assertion')
   if (header) return header
+  // 2. CF_Authorization cookie — sent by browser for cross-origin requests
+  //    (frontend on pulluprider.* making calls to api.* with credentials: 'include')
   const cookie = c.req.header('cookie') || ''
   const m = cookie.match(/(?:^|;\s*)CF_Authorization=([^;]+)/)
   return m?.[1]
