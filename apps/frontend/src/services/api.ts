@@ -46,7 +46,11 @@ export function apiErrorMessage(err: unknown): string {
 }
 
 export function logout(): void {
-  // Use the app-domain logout so Cloudflare Access clears the cookie
-  // for THIS specific app and redirects back to its login page.
-  window.location.replace('/cdn-cgi/access/logout')
+  // Cloudflare Access team logout with redirect back to this app's origin.
+  // After clearing the session, Access redirects back to the current origin
+  // which triggers the Access login page for this specific app.
+  const returnUrl = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
+  window.location.replace(
+    `https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/logout${returnUrl ? `?redirect=${returnUrl}` : ''}`,
+  )
 }
