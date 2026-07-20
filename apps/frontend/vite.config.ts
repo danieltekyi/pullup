@@ -38,8 +38,7 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'icons/icon-192.png', 'icons/icon-512.png'],
-        manifest: {
+        includeAssets: ['favicon.ico', 'icons/icon-192.png', 'icons/icon-512.png'],        manifest: {
           name: m.name,
           short_name: m.short_name,
           description: m.description,

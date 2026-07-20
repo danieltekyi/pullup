@@ -20,7 +20,11 @@ export function ProtectedRoute({ requiredMenu, children }: Props) {
       </div>
     )
   }
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) {
+    // Go directly to Cloudflare Access login — not the React /login page
+    window.location.href = `https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/login/${window.location.hostname}?redirect_url=${encodeURIComponent('/')}`
+    return null
+  }
   if (requiredMenu && !canSeeMenu(requiredMenu)) return <Navigate to="/" replace />
   if (user.role === 'rider') return <Navigate to="/rider" replace />
   return children ? <>{children}</> : <Outlet />
@@ -28,7 +32,11 @@ export function ProtectedRoute({ requiredMenu, children }: Props) {
 
 export function RiderOnlyRoute({ children }: { children?: ReactNode }) {
   const { user, loading } = useAuth()
-  if (loading) return null
-  if (!user) return <Navigate to="/login" replace />
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>
+  if (!user) {
+    // Go directly to Cloudflare Access login
+    window.location.href = `https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/login/${window.location.hostname}?redirect_url=${encodeURIComponent('/')}`
+    return null
+  }
   return children ? <>{children}</> : <Outlet />
 }

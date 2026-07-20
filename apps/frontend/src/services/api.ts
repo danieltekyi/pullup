@@ -46,6 +46,7 @@ export function apiErrorMessage(err: unknown): string {
 }
 
 export function logout(): void {
-  // Cloudflare Access logout — invalidates the session cookie.
-  window.location.href = '/cdn-cgi/access/logout'
+  // Go to the Cloudflare Access logout endpoint — full URL so it definitely
+  // hits the Access edge and isn't caught by the React router or service worker cache.
+  window.location.replace('https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/logout')
 }
