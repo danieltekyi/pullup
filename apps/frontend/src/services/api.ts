@@ -37,9 +37,11 @@ api.interceptors.response.use(
   r => r,
   (err: AxiosError<{ error?: string; message?: string }>) => {
     if (err.response?.status === 401) {
-      // Session expired — force reload so Cloudflare Access shows the login page.
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/track')) {
-        window.location.reload()
+        // Rider custom auth: clear token and reload to show login form.
+        // Admin: reload triggers Cloudflare Access re-prompt.
+        try { localStorage.removeItem('rider_session') } catch { /* ignore */ }
+        window.location.replace('/')
       }
     }
     return Promise.reject(err)
@@ -55,9 +57,17 @@ export function apiErrorMessage(err: unknown): string {
 }
 
 export function logout(): void {
-  // Cloudflare Access team logout with redirect back to this app's origin.
-  // After clearing the session, Access redirects back to the current origin
-  // which triggers the Access login page for this specific app.
+  // If rider is using a custom localStorage session, just clear it and reload.
+  // The app will drop back to the RiderLogin form immediately.
+  try {
+    if (localStorage.getItem('rider_session')) {
+      localStorage.removeItem('rider_session')
+      window.location.replace('/')
+      return
+    }
+  } catch { /* ignore */ }
+
+  // Admin/Customer: Cloudflare Access team logout with redirect back to origin.
   const returnUrl = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
   window.location.replace(
     `https://aegis-dashboard.cloudflareaccess.com/cdn-cgi/access/logout${returnUrl ? `?redirect=${returnUrl}` : ''}`,
