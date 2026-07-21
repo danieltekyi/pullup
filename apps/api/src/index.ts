@@ -9,7 +9,7 @@ import ordersRouter from './routes/orders'
 import syncRouter from './routes/sync'
 import trackerRouter from './routes/tracker'
 import ridersRouter from './routes/riders'
-import riderAuthRouter, { verifyRiderToken } from './routes/riderAuth'
+import riderAuthRouter from './routes/riderAuth'
 import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
 

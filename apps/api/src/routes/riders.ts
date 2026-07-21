@@ -11,7 +11,7 @@ import {
   updateRider,
 } from '../repos/riders'
 import { newId, nowIso } from '../lib/ids'
-import { badRequest, notFound } from '../lib/errors'
+import { notFound } from '../lib/errors'
 import { listOrders } from '../repos/orders'
 import { addEmailToRidersGroup, removeEmailFromRidersGroup } from '../services/accessGroups'
 
@@ -184,7 +184,7 @@ app.post('/:id/deactivate', requireAuth(), requireRole('super-admin', 'manager')
     .run()
 
   // Remove from Cloudflare Access riders group if email known
-  let accessResult = { ok: true, skipped: true }
+  let accessResult: { ok: boolean; skipped: boolean } = { ok: true, skipped: true }
   if (rider.email) {
     accessResult = await removeEmailFromRidersGroup(c.env, rider.email)
   }
@@ -209,7 +209,7 @@ app.post('/:id/activate', requireAuth(), requireRole('super-admin', 'manager'), 
     .bind(nowIso(), rider.id)
     .run()
 
-  let accessResult = { ok: true, skipped: true }
+  let accessResult: { ok: boolean; skipped: boolean } = { ok: true, skipped: true }
   if (rider.email) {
     accessResult = await addEmailToRidersGroup(c.env, rider.email)
   }

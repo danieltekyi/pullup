@@ -2,13 +2,6 @@ import { api } from '../services/api'
 
 const VAPID_STORAGE = 'pullup-vapid-key'
 
-function urlB64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const raw = atob(base64)
-  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
-}
-
 async function fetchVapidPublicKey(): Promise<string | null> {
   const cached = localStorage.getItem(VAPID_STORAGE)
   if (cached) return cached
@@ -35,7 +28,7 @@ export async function subscribeToPush(): Promise<boolean> {
 
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlB64ToUint8Array(publicKey),
+    applicationServerKey: publicKey,
   })
   const json = sub.toJSON() as { endpoint?: string; keys?: { p256dh: string; auth: string } }
   if (!json.endpoint || !json.keys) return false

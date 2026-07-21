@@ -1,7 +1,8 @@
 import type { ReactNode, HTMLAttributes } from 'react'
 import { cn } from '../../lib/cn'
 
-interface Props extends HTMLAttributes<HTMLDivElement> {
+// Omit `title` from HTMLAttributes because we type it as ReactNode (not string)
+interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   title?: ReactNode
   action?: ReactNode
   padded?: boolean

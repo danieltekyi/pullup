@@ -17,7 +17,7 @@ interface OrderItem {
   cost?: number
 }
 
-const emptyForm = { name: '', phone: '', email: '', zone: '', status: 'active' as const, ratePerDelivery: '', ratePctOfFee: '' }
+const emptyForm = { name: '', phone: '', email: '', zone: '', status: 'active' as 'active' | 'inactive', ratePerDelivery: '', ratePctOfFee: '' }
 
 export default function RidersPage() {
   const [riders, setRiders] = useState<RiderWithCounts[]>([])
@@ -89,7 +89,6 @@ export default function RidersPage() {
     finally { setLoadingOrders(null) }
   }
 
-  const statusCls: Record<string,'active'|'inactive'> = {}
   const statusColors: Record<string, string> = { active: 'bg-emerald-100 text-emerald-800', inactive: 'bg-slate-100 text-slate-600', on_delivery: 'bg-blue-100 text-blue-800' }
   const orderStatusColors: Record<string, string> = { assigned:'text-blue-700', picked_up:'text-sky-700', in_transit:'text-amber-700', awaiting_confirmation:'text-orange-700', confirmed:'text-emerald-700', delivered:'text-emerald-700', failed:'text-red-700', rejected:'text-red-700' }
 

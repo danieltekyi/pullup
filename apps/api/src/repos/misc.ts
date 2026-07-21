@@ -1,6 +1,6 @@
 import type { Env } from '../env'
 import { rowToObj } from '../lib/db'
-import { newId, nowIso } from '../lib/ids'
+import { nowIso } from '../lib/ids'
 
 export interface Zone {
   id: string

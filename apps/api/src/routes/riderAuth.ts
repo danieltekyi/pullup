@@ -6,7 +6,6 @@ import { badRequest } from '../lib/errors'
 import { findUserByPhone, findUserByEmail } from '../repos/riderAuth'
 import { sendSms } from '../services/notifications/sms'
 import { sendEmail } from '../services/notifications/email'
-import { nowIso } from '../lib/ids'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 

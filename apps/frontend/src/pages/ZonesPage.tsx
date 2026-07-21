@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiErrorMessage } from '../services/api'
-import { Button, Card, Field, Input, Table, toast } from '../components/ui'
+import { Button, Card, Field, Input, toast } from '../components/ui'
 
 interface Zone {
   id: string

@@ -46,10 +46,10 @@ export function accessAuth(): MiddlewareHandler<{ Bindings: Env; Variables: AppV
         if (riderPayload) {
           c.set('user', {
             sub: riderPayload.sub,
-            email: riderPayload.email,
+            email: riderPayload.email ?? '',
             id: riderPayload.sub,
             name: riderPayload.name ?? 'Rider',
-            role: riderPayload.role as import('../env').AppUser['role'],
+            role: riderPayload.role as AppUser['role'],
             status: 'active',
             branchId: riderPayload.branchId,
             riderId: riderPayload.riderId,

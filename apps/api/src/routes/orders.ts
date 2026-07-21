@@ -301,8 +301,8 @@ app.post('/:id/proof/:kind', requireAuth(), async c => {
   const kind = c.req.param('kind') as 'signature' | 'photo'
   if (kind !== 'signature' && kind !== 'photo') throw badRequest('kind must be signature or photo')
   const form = await c.req.formData()
-  const file = form.get('file')
-  if (!(file instanceof File)) throw badRequest('file required')
+  const file = form.get('file') as File | null
+  if (!file || typeof file === 'string') throw badRequest('file required')
   try {
     const result = await saveProof(c.env, kind, order.id, file)
     return c.json(result)
