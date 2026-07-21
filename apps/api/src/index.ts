@@ -39,6 +39,22 @@ app.use('*', accessAuth())
 
 app.get('/health', c => c.json({ ok: true, service: 'pullup-api', env: c.env.CF_ACCESS_TEAM_DOMAIN }))
 
+// Auth debug — shows what the Worker sees (token presence, user object).
+// Visit pulluprider.aegisassetllc.com/api/auth/debug to diagnose login issues.
+app.get('/api/auth/debug', c => {
+  const u = c.get('user')
+  const cfJwt = c.req.header('Cf-Access-Jwt-Assertion')
+  const cookie = c.req.header('cookie') || ''
+  const hasCookie = cookie.includes('CF_Authorization=')
+  const hasBearer = (c.req.header('Authorization') || '').startsWith('Bearer ')
+  return c.json({
+    user: u ? { id: u.id, email: u.email, role: u.role, name: u.name } : null,
+    authenticated: !!u,
+    headers: { hasCfJwt: !!cfJwt, hasCookie, hasBearer },
+    acceptedAuds: c.env.CF_ACCESS_AUD.split(',').map(a => a.trim()),
+  })
+})
+
 // Public endpoints — no Access needed
 app.route('/api/rider-auth', riderAuthRouter)
 
