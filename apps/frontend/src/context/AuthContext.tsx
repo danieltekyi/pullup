@@ -22,6 +22,9 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue)
 
+// The rider app only uses localStorage tokens — never Cloudflare Access cookies.
+const IS_RIDER_APP = (import.meta.env.VITE_APP_MODE ?? 'admin') === 'rider'
+
 function getRiderToken(): string | null {
   try { return localStorage.getItem('rider_session') } catch { return null }
 }
@@ -37,10 +40,8 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 async function loadUser(): Promise<AuthUser | null> {
   const riderToken = getRiderToken()
   if (riderToken) {
-    // Decode the JWT locally first — avoids an API round-trip and the 401 loop.
     const payload = decodeJwtPayload(riderToken)
     if (payload && typeof payload.sub === 'string') {
-      // Check it hasn't expired
       if (payload.exp && typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) {
         localStorage.removeItem('rider_session')
       } else {
@@ -59,7 +60,11 @@ async function loadUser(): Promise<AuthUser | null> {
     }
   }
 
-  // Cloudflare Access cookie-based auth (admin / manager)
+  // Rider app: never fall back to Cloudflare Access cookie auth.
+  // If no rider_session, show the login form.
+  if (IS_RIDER_APP) return null
+
+  // Admin / Manager: use Cloudflare Access cookie.
   try {
     const res = await api.get<AuthUser>('/api/users/me')
     return res.data
