@@ -36,13 +36,18 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   r => r,
   (err: AxiosError<{ error?: string; message?: string }>) => {
-    if (err.response?.status === 401) {
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/track')) {
-        // Rider custom auth: clear token and reload to show login form.
-        // Admin: reload triggers Cloudflare Access re-prompt.
-        try { localStorage.removeItem('rider_session') } catch { /* ignore */ }
-        window.location.replace('/')
-      }
+    if (err.response?.status === 401 && typeof window !== 'undefined' && !window.location.pathname.startsWith('/track')) {
+      // Only redirect when the user HAD a session that just expired.
+      // If there was no session at all (initial unauthenticated load), just
+      // let the error propagate — AuthContext catches it and shows the login form.
+      try {
+        const hadToken = !!localStorage.getItem('rider_session')
+        if (hadToken) {
+          localStorage.removeItem('rider_session')
+          window.location.replace('/')
+          return Promise.reject(err)
+        }
+      } catch { /* localStorage unavailable */ }
     }
     return Promise.reject(err)
   },

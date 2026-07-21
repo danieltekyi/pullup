@@ -22,26 +22,44 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue)
 
-// Check if we have a rider session token in localStorage
 function getRiderToken(): string | null {
   try { return localStorage.getItem('rider_session') } catch { return null }
 }
 
+/** Decode a JWT payload without verifying (signature is verified server-side). */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const [, payload] = token.split('.')
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+  } catch { return null }
+}
+
 async function loadUser(): Promise<AuthUser | null> {
-  // If there's a rider session token, use it via Authorization header
   const riderToken = getRiderToken()
   if (riderToken) {
-    try {
-      const res = await api.get<AuthUser>('/api/users/me', {
-        headers: { Authorization: `Bearer ${riderToken}` },
-      })
-      return res.data
-    } catch {
-      // Token invalid or expired
+    // Decode the JWT locally first — avoids an API round-trip and the 401 loop.
+    const payload = decodeJwtPayload(riderToken)
+    if (payload && typeof payload.sub === 'string') {
+      // Check it hasn't expired
+      if (payload.exp && typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('rider_session')
+      } else {
+        return {
+          sub: payload.sub,
+          id: payload.sub,
+          email: (payload.email as string) ?? '',
+          name: (payload.name as string) ?? 'Rider',
+          role: (payload.role as Role) ?? 'rider',
+          riderId: payload.riderId as string | undefined,
+          branchId: payload.branchId as string | undefined,
+        }
+      }
+    } else {
       localStorage.removeItem('rider_session')
     }
   }
-  // Fall back to Cloudflare Access cookie-based auth
+
+  // Cloudflare Access cookie-based auth (admin / manager)
   try {
     const res = await api.get<AuthUser>('/api/users/me')
     return res.data
@@ -59,7 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   function logout() {
-    // Clear rider session token if present
     try { localStorage.removeItem('rider_session') } catch {}
     logoutApi()
   }
