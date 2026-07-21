@@ -107,11 +107,13 @@ app.post('/verify', async c => {
   // Delete the code so it can only be used once
   await c.env.KV.delete(`rider-code:${rider.id}`)
 
-  // Sign a 30-day session JWT
+  // Sign a 30-day session JWT.
+  // Always use role 'rider' regardless of the user's DB role —
+  // anyone authenticating through the rider app is acting as a rider.
   const jwt = await new SignJWT({
     sub: rider.id,
     email: rider.email,
-    role: rider.role,
+    role: 'rider',
     riderId: rider.riderId,
     branchId: rider.branchId,
     name: rider.name,
