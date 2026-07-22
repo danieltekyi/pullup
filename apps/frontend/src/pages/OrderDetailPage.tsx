@@ -1,26 +1,40 @@
 import { useEffect, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Order, OrderEvent } from '@pullup/shared'
 import { api, apiErrorMessage } from '../services/api'
-import { Button, Card, StatusBadge, toast } from '../components/ui'
-import { CheckCircle2, XCircle, Truck } from 'lucide-react'
+import { Button, Card, Select, StatusBadge, toast } from '../components/ui'
+import { Bike, CheckCircle2, XCircle, Truck } from 'lucide-react'
+
+interface RiderItem {
+  id: string
+  name: string
+  zone: string
+  status: string
+}
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [order, setOrder] = useState<Order | null>(null)
   const [events, setEvents] = useState<OrderEvent[]>([])
+  const [riders, setRiders] = useState<RiderItem[]>([])
+  const [selectedRider, setSelectedRider] = useState('')
+  const [assigning, setAssigning] = useState(false)
   const [loading, setLoading] = useState(true)
 
   async function load() {
     if (!id) return
     setLoading(true)
     try {
-      const [o, e] = await Promise.all([
+      const [o, e, r] = await Promise.all([
         api.get<Order>(`/api/orders/${id}`),
         api.get<{ items: OrderEvent[] }>(`/api/orders/${id}/events`),
+        api.get<{ items: RiderItem[] }>(`/api/riders?status=active&limit=100`),
       ])
       setOrder(o.data)
       setEvents(e.data.items)
+      setRiders(r.data.items)
+      setSelectedRider(o.data.assignedTo ?? '')
     } catch (err) {
       toast.error(apiErrorMessage(err))
     } finally {
@@ -32,6 +46,20 @@ export default function OrderDetailPage() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  async function assignRider() {
+    if (!selectedRider) return
+    setAssigning(true)
+    try {
+      await api.post(`/api/orders/${id}/assign`, { riderId: selectedRider })
+      toast.success('Rider assigned successfully')
+      load()
+    } catch (err) {
+      toast.error(apiErrorMessage(err))
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   async function confirm() {
     try {
@@ -94,6 +122,35 @@ export default function OrderDetailPage() {
             <Row label="Created" value={new Date(order.createdAt).toLocaleString()} />
             <Row label="Updated" value={new Date(order.updatedAt).toLocaleString()} />
           </dl>
+          {(order.status === 'pending' || order.status === 'assigned') && (
+            <div className="mt-6 pt-4 border-t border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <Bike size={14} /> Assign Rider
+              </h4>
+              <div className="flex gap-2 items-center">
+                <Select
+                  value={selectedRider}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedRider(e.target.value)}
+                  className="flex-1"
+                >
+                  <option value="">— select rider —</option>
+                  {riders.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.zone})
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  onClick={assignRider}
+                  loading={assigning}
+                  disabled={!selectedRider}
+                  icon={<Truck size={14} />}
+                >
+                  Assign
+                </Button>
+              </div>
+            </div>
+          )}
           {order.proof && (
             <div className="mt-6 pt-4 border-t border-slate-100">
               <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">

@@ -14,6 +14,7 @@ import {
   MapPin,
   UsersRound,
   History,
+  LayoutGrid,
   Menu,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -43,6 +44,7 @@ const NAV: NavItem[] = [
   { key: 'users', to: '/users', label: 'Users', icon: UserCog },
   { key: 'branches', to: '/branches', label: 'Branches', icon: GitBranch },
   { key: 'audit', to: '/audit', label: 'Audit Log', icon: History },
+  { key: 'dashboard', to: '/launchpad', label: 'App Links', icon: LayoutGrid },
   { key: 'settings', to: '/settings', label: 'Settings', icon: Settings },
 ]
 

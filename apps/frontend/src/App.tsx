@@ -11,6 +11,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
+import LaunchpadPage from './pages/LaunchpadPage'
 import RidersPage from './pages/RidersPage'
 import FleetPage from './pages/FleetPage'
 import PartnersPage from './pages/PartnersPage'
@@ -47,6 +48,7 @@ function AdminApp() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/orders/:id" element={<OrderDetailPage />} />
+            <Route path="/launchpad" element={<LaunchpadPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/riders" element={<RidersPage />} />
             <Route path="/fleet" element={<FleetPage />} />
