@@ -365,6 +365,42 @@ app.post('/upload', requireAuth(), async c => {
   const results: string[] = []
   const errors: string[] = []
 
+  // Load pricing params once for all rows
+  const [baseFeeRow, rateRow, minRow, weightThreshRow, weightSurchargeRow] = await Promise.all([
+    c.env.DB.prepare("SELECT value FROM params WHERE key='base_fee' AND category='delivery'").first<{value:string}>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='rate_per_km' AND category='delivery'").first<{value:string}>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='min_fee' AND category='delivery'").first<{value:string}>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='weight_threshold' AND category='delivery'").first<{value:string}>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='weight_surcharge' AND category='delivery'").first<{value:string}>(),
+  ])
+  const baseFee = parseFloat(baseFeeRow?.value ?? '25')
+  const ratePerKm = parseFloat(rateRow?.value ?? '3')
+  const minFee = parseFloat(minRow?.value ?? '20')
+  const weightThresh = parseFloat(weightThreshRow?.value ?? '5')
+  const weightSurcharge = parseFloat(weightSurchargeRow?.value ?? '10')
+
+  async function geocode(address: string): Promise<{lat:number;lng:number}|null> {
+    if (!c.env.GOOGLE_MAPS_API_KEY) return null
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=gh&key=${c.env.GOOGLE_MAPS_API_KEY}`
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+      const data = await res.json<any>()
+      if (data.status !== 'OK' || !data.results[0]) return null
+      return data.results[0].geometry.location
+    } catch { return null }
+  }
+
+  function calcCost(distKm: number, weightKg: number): number {
+    const weightExtra = weightKg > weightThresh ? weightSurcharge : 0
+    return Math.max(minFee, baseFee + distKm * ratePerKm + weightExtra)
+  }
+
+  function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  }
+
   for (let i = 1; i < lines.length; i++) {
     const row = parseCsvLine(lines[i])
     if (row.every(c => !c)) continue // skip empty rows
@@ -387,8 +423,24 @@ app.post('/upload', requireAuth(), async c => {
     }
 
     const paymentMethod = paymentRaw === 'prepaid' ? 'prepaid' : paymentRaw === 'invoice' ? 'invoice' : 'cod'
-    const weight = weightStr ? parseFloat(weightStr) : undefined
-    const cost = costStr ? parseFloat(costStr) : undefined
+    const weight = weightStr ? parseFloat(weightStr) : 0
+    let cost = costStr ? parseFloat(costStr) : undefined
+
+    // Auto-calculate cost using geocoding if not provided
+    if (!cost || isNaN(cost)) {
+      cost = undefined
+      if (c.env.GOOGLE_MAPS_API_KEY && senderAddress && recipientAddress) {
+        const [pickup, dropoff] = await Promise.all([
+          geocode(senderAddress),
+          geocode(recipientAddress),
+        ])
+        if (pickup && dropoff) {
+          const distKm = haversine(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng)
+          cost = Math.round(calcCost(distKm, !isNaN(weight) ? weight : 0) * 100) / 100
+        }
+      }
+    }
+
     const descriptionFull = [
       description,
       recipientName ? `Recipient: ${recipientName}` : '',
@@ -405,8 +457,8 @@ app.post('/upload', requireAuth(), async c => {
         customerPhone: senderPhone || undefined,
         destination: recipientAddress,
         description: descriptionFull || undefined,
-        weight: weight && !isNaN(weight) ? weight : undefined,
-        cost: cost && !isNaN(cost) ? cost : undefined,
+        weight: !isNaN(weight) && weight > 0 ? weight : undefined,
+        cost: cost,
         paymentMethod: paymentMethod as 'prepaid' | 'cod' | 'invoice',
         createdBy: user.sub,
       })

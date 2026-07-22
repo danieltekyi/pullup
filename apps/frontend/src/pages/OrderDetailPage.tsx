@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import type { Order, OrderEvent } from '@pullup/shared'
 import { api, apiErrorMessage } from '../services/api'
 import { Button, Card, Input, Select, StatusBadge, toast } from '../components/ui'
-import { Bike, CheckCircle2, XCircle, Truck } from 'lucide-react'
+import { Bike, CheckCircle2, Trash2, XCircle, Truck } from 'lucide-react'
 
 interface RiderItem {
   id: string
@@ -15,6 +15,7 @@ interface RiderItem {
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const nav = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
   const [events, setEvents] = useState<OrderEvent[]>([])
   const [riders, setRiders] = useState<RiderItem[]>([])
@@ -97,12 +98,23 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function deleteOrder() {
+    if (!confirm(`Delete order ${id}? This cannot be undone.`)) return
+    try {
+      await api.delete(`/api/orders/${id}`)
+      toast.success('Order deleted')
+      nav('/orders')
+    } catch (err) {
+      toast.error(apiErrorMessage(err))
+    }
+  }
+
   if (loading) return <div className="p-8 text-slate-400">Loading…</div>
   if (!order) return <div className="p-8 text-slate-400">Order not found</div>
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-slate-500 font-mono">{order.id}</p>
           <h1 className="text-2xl font-bold flex items-center gap-3">
@@ -110,16 +122,21 @@ export default function OrderDetailPage() {
             <StatusBadge status={order.status} />
           </h1>
         </div>
-        {order.status === 'awaiting_confirmation' && (
-          <div className="flex gap-2">
-            <Button variant="success" icon={<CheckCircle2 size={16} />} onClick={confirm}>
-              Confirm delivery
-            </Button>
-            <Button variant="danger" icon={<XCircle size={16} />} onClick={reject}>
-              Reject
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          {order.status === 'awaiting_confirmation' && (
+            <>
+              <Button variant="success" icon={<CheckCircle2 size={16} />} onClick={confirm}>
+                Confirm delivery
+              </Button>
+              <Button variant="danger" icon={<XCircle size={16} />} onClick={reject}>
+                Reject
+              </Button>
+            </>
+          )}
+          <Button variant="danger" icon={<Trash2 size={16} />} onClick={deleteOrder}>
+            Delete
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

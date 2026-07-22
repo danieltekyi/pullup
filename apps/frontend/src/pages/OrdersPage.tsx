@@ -266,6 +266,19 @@ export default function OrdersPage() {
             key: 'created', header: 'Created',
             render: o => <span className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleString()}</span>,
           },
+          {
+            key: 'del', header: '',
+            render: o => (
+              <button
+                onClick={async () => {
+                  if (!confirm(`Delete order ${o.id.slice(-8)}?`)) return
+                  try { await api.delete(`/api/orders/${o.id}`); toast.success('Deleted'); load() }
+                  catch (err) { toast.error(apiErrorMessage(err)) }
+                }}
+                className="text-xs text-red-400 hover:text-red-600 font-medium px-2"
+              >✕</button>
+            ),
+          },
         ]}
       />
 
