@@ -8,6 +8,7 @@ interface PlaceResult {
 }
 
 interface GooglePlace {
+  name?: string
   formatted_address?: string
   geometry?: {
     location?: {
@@ -40,7 +41,7 @@ declare global {
         places?: {
           Autocomplete: new (
             input: HTMLInputElement,
-            options?: { types?: string[]; componentRestrictions?: { country: string } },
+            options?: { types?: string[]; componentRestrictions?: { country: string }; fields?: string[] },
           ) => GoogleAutocompleteInstance
         }
       }
@@ -75,18 +76,24 @@ export function AddressAutocomplete({
 
     const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
       componentRestrictions: { country: 'gh' },
+      fields: ['formatted_address', 'geometry', 'name'],
     })
 
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace()
       if (!place.formatted_address) return
 
-      // Update React state with the selected address
-      onChange(place.formatted_address)
+      // Include business/place name so rider knows exact location
+      // e.g. "Eat Healthy Organic Vegetables, Oyarifa Road, Oyarifa, Ghana"
+      const fullAddress = place.name && !place.formatted_address.includes(place.name)
+        ? `${place.name}, ${place.formatted_address}`
+        : place.formatted_address
+
+      onChange(fullAddress)
 
       if (!place.geometry?.location) return
       onPlaceSelect({
-        address: place.formatted_address,
+        address: fullAddress,
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng(),
       })
