@@ -145,6 +145,16 @@ app.put('/physics-pricing/params', requireAuth(), async c => {
   return c.json({ saved: body.params.length })
 })
 
+// Update a single param by ID
+app.put('/params/:id', requireAuth(), requireRole('super-admin', 'manager'), async c => {
+  const body = z.object({ value: z.string() }).parse(await c.req.json())
+  const id = c.req.param('id')
+  const existing = (await listParams(c.env)).find((p: {id:string}) => p.id === id)
+  if (!existing) throw notFound()
+  await upsertParam(c.env, { ...existing, value: body.value })
+  return c.json({ ok: true })
+})
+
 // -------- analytics --------
 app.get('/analytics/summary', requireAuth(), async c => {
   const b = getBranchFilter(c)
