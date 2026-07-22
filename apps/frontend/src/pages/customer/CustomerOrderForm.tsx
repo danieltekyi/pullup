@@ -25,10 +25,13 @@ interface OrderFormState {
 interface DeliveryEstimate {
   cost: number
   distanceKm: number
+  weightSurcharge: number
   breakdown: {
     baseFee: number
     ratePerKm: number
     distanceKm: number
+    weightKg: number
+    weightSurcharge: number
   }
 }
 
@@ -76,7 +79,7 @@ export default function CustomerOrderForm() {
 
     api
       .get<DeliveryEstimate>(
-        `/api/public/orders/estimate?lat1=${form.pickupLat}&lng1=${form.pickupLng}&lat2=${form.dropoffLat}&lng2=${form.dropoffLng}`,
+        `/api/public/orders/estimate?lat1=${form.pickupLat}&lng1=${form.pickupLng}&lat2=${form.dropoffLat}&lng2=${form.dropoffLng}${form.weight ? `&weight=${form.weight}` : ''}`,
       )
       .then(response => {
         if (!cancelled) setEstimate(response.data)
@@ -91,7 +94,7 @@ export default function CustomerOrderForm() {
     return () => {
       cancelled = true
     }
-  }, [form.pickupLat, form.pickupLng, form.dropoffLat, form.dropoffLng])
+  }, [form.pickupLat, form.pickupLng, form.dropoffLat, form.dropoffLng, form.weight])
 
   function update<K extends keyof OrderFormState>(key: K, value: OrderFormState[K]) {
     setForm(current => ({ ...current, [key]: value }))
@@ -218,7 +221,7 @@ export default function CustomerOrderForm() {
                   <>
                     <p className="text-3xl font-bold text-emerald-700">GHS {estimate.cost.toFixed(2)}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {estimate.distanceKm} km · Base GHS {estimate.breakdown.baseFee} + GHS {estimate.breakdown.ratePerKm}/km
+                      {estimate.distanceKm} km · Base GHS {estimate.breakdown.baseFee} + GHS {estimate.breakdown.ratePerKm}/km{estimate.weightSurcharge ? ` + GHS ${estimate.weightSurcharge} heavy item` : ''}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">Final cost confirmed by our team</p>
                   </>

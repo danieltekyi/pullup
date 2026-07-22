@@ -25,7 +25,7 @@ const createPublicOrderSchema = z.object({
 })
 
 app.get('/orders/estimate', async c => {
-  const { lat1, lng1, lat2, lng2 } = c.req.query()
+  const { lat1, lng1, lat2, lng2, weight } = c.req.query()
   if (!lat1 || !lng1 || !lat2 || !lng2) {
     return c.json({ error: 'lat1, lng1, lat2, lng2 required' }, 400)
   }
@@ -36,16 +36,23 @@ app.get('/orders/estimate', async c => {
   }
 
   const [pickupLat, pickupLng, dropoffLat, dropoffLng] = coords
-  const [baseFeeRow, rateRow, minRow] = await Promise.all([
+  const weightKg = weight ? Number.parseFloat(weight) : 0
+
+  const [baseFeeRow, rateRow, minRow, weightThresholdRow, weightSurchargeRow] = await Promise.all([
     c.env.DB.prepare("SELECT value FROM params WHERE key = 'base_fee' AND category = 'delivery'").first<{ value: string }>(),
     c.env.DB.prepare("SELECT value FROM params WHERE key = 'rate_per_km' AND category = 'delivery'").first<{ value: string }>(),
     c.env.DB.prepare("SELECT value FROM params WHERE key = 'min_fee' AND category = 'delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key = 'weight_threshold' AND category = 'delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key = 'weight_surcharge' AND category = 'delivery'").first<{ value: string }>(),
   ])
 
-  const baseFee = Number.parseFloat(baseFeeRow?.value ?? '15')
+  const baseFee = Number.parseFloat(baseFeeRow?.value ?? '25')
   const ratePerKm = Number.parseFloat(rateRow?.value ?? '3')
-  const minFee = Number.parseFloat(minRow?.value ?? '10')
+  const minFee = Number.parseFloat(minRow?.value ?? '20')
+  const weightThreshold = Number.parseFloat(weightThresholdRow?.value ?? '5')
+  const weightSurcharge = Number.parseFloat(weightSurchargeRow?.value ?? '10')
 
+  // Haversine distance
   const earthRadiusKm = 6371
   const dLat = ((dropoffLat - pickupLat) * Math.PI) / 180
   const dLng = ((dropoffLng - pickupLng) * Math.PI) / 180
@@ -53,15 +60,25 @@ app.get('/orders/estimate', async c => {
     Math.sin(dLat / 2) ** 2 +
     Math.cos((pickupLat * Math.PI) / 180) * Math.cos((dropoffLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
   const distanceKm = earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
   const roundedDistanceKm = Math.round(distanceKm * 10) / 10
-  const cost = Math.max(minFee, baseFee + distanceKm * ratePerKm)
+
+  // Weight surcharge (only over threshold)
+  const weightExtra = weightKg > weightThreshold ? weightSurcharge : 0
+
+  const cost = Math.max(minFee, baseFee + distanceKm * ratePerKm + weightExtra)
 
   return c.json({
     distanceKm: roundedDistanceKm,
     cost: Math.round(cost * 100) / 100,
     currency: 'GHS',
-    breakdown: { baseFee, ratePerKm, distanceKm: roundedDistanceKm },
+    weightSurcharge: weightExtra,
+    breakdown: {
+      baseFee,
+      ratePerKm,
+      distanceKm: roundedDistanceKm,
+      weightKg,
+      weightSurcharge: weightExtra,
+    },
   })
 })
 
