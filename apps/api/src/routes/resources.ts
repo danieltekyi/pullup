@@ -52,6 +52,7 @@ app.delete('/fleet/:id', requireAuth(), async c => {
 app.get('/partners', requireAuth(), async c => c.json({ items: await listPartners(c.env) }))
 const partnerSchema = z.object({
   name: z.string().min(1),
+  email: z.string().email().optional(),
   getUrl: z.string().url().optional(),
   putUrlTemplate: z.string().optional(),
   apiKey: z.string().optional(),

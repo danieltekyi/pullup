@@ -13,21 +13,21 @@ export async function findPartner(env: Env, id: string): Promise<Partner | undef
   return rowToObj<Partner>(row)
 }
 
-export async function createPartner(env: Env, data: Partial<Partner> & { name: string }): Promise<Partner> {
+export async function createPartner(env: Env, data: Partial<Partner> & { name: string; email?: string }): Promise<Partner> {
   const id = newId('prt')
   const now = nowIso()
   await env.DB.prepare(
-    `INSERT INTO partners (id, branch_id, name, get_url, put_url_template, api_key, webhook_secret, active, created_at, updated_at, version)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    `INSERT INTO partners (id, branch_id, name, email, get_url, put_url_template, api_key, webhook_secret, active, created_at, updated_at, version)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
   )
-    .bind(id, data.branchId ?? null, data.name, data.getUrl ?? null, data.putUrlTemplate ?? null, data.apiKey ?? null, data.webhookSecret ?? null, data.active === false ? 0 : 1, now, now)
+    .bind(id, data.branchId ?? null, data.name, (data as any).email ?? null, data.getUrl ?? null, data.putUrlTemplate ?? null, data.apiKey ?? null, data.webhookSecret ?? null, data.active === false ? 0 : 1, now, now)
     .run()
   return (await findPartner(env, id))!
 }
 
-export async function updatePartner(env: Env, id: string, patch: Partial<Partner>): Promise<Partner | undefined> {
+export async function updatePartner(env: Env, id: string, patch: Partial<Partner> & { email?: string }): Promise<Partner | undefined> {
   const map: Record<string, string> = {
-    branchId: 'branch_id', name: 'name', getUrl: 'get_url', putUrlTemplate: 'put_url_template',
+    branchId: 'branch_id', name: 'name', email: 'email', getUrl: 'get_url', putUrlTemplate: 'put_url_template',
     apiKey: 'api_key', webhookSecret: 'webhook_secret', active: 'active', lastFetchedAt: 'last_fetched_at',
   }
   const parts: string[] = []

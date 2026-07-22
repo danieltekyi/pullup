@@ -52,6 +52,7 @@ export default function PartnersPage() {
     try {
       const body = {
         name: form.name.trim(),
+        email: (form as any).email?.trim() || undefined,
         getUrl: form.getUrl.trim() || undefined,
         putUrlTemplate: form.putUrlTemplate.trim() || undefined,
         apiKey: form.apiKey.trim() || undefined,
@@ -177,6 +178,9 @@ export default function PartnersPage() {
         <div className="space-y-4">
           <Field label="Partner name" required hint="e.g. Jumia, Tonaton, your website">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="My Online Store" autoFocus />
+          </Field>
+          <Field label="Email address" hint="Required for partner portal login (pulluppartner.aegisassetllc.com)">
+            <Input type="email" value={(form as any).email ?? ''} onChange={e => setForm(f => ({ ...f, email: e.target.value } as any))} placeholder="partner@business.com" />
           </Field>
           <Field label="GET URL" hint="PullUp polls this URL every 5 min to pull new orders">
             <Input value={form.getUrl} onChange={e => setForm(f => ({ ...f, getUrl: e.target.value }))}

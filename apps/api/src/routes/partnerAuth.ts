@@ -19,11 +19,10 @@ app.post('/request', async c => {
   const { identifier } = z.object({ identifier: z.string().min(4).max(120) }).parse(await c.req.json())
 
   const partner = await c.env.DB.prepare(
-    `SELECT id, email, name, status FROM partners WHERE email = ? AND deleted_at IS NULL LIMIT 1`
-  ).bind(identifier.trim().toLowerCase()).first<{ id: string; email: string; name: string; status: string }>()
+    `SELECT id, email, name, active FROM partners WHERE email = ? AND active = 1 LIMIT 1`
+  ).bind(identifier.trim().toLowerCase()).first<{ id: string; email: string; name: string; active: number }>()
 
-  if (!partner || partner.status === 'inactive') {
-    // Silent — don't reveal which emails are registered
+  if (!partner) {
     return c.json({ ok: true, message: 'If your account exists, a code has been sent.' })
   }
 
@@ -57,10 +56,10 @@ app.post('/verify', async c => {
   const { identifier, code } = z.object({ identifier: z.string().min(4), code: z.string().length(6) }).parse(await c.req.json())
 
   const partner = await c.env.DB.prepare(
-    `SELECT id, email, name, status FROM partners WHERE email = ? AND deleted_at IS NULL LIMIT 1`
-  ).bind(identifier.trim().toLowerCase()).first<{ id: string; email: string; name: string; status: string }>()
+    `SELECT id, email, name, active FROM partners WHERE email = ? AND active = 1 LIMIT 1`
+  ).bind(identifier.trim().toLowerCase()).first<{ id: string; email: string; name: string; active: number }>()
 
-  if (!partner || partner.status === 'inactive') throw badRequest('Invalid code or account not found')
+  if (!partner) throw badRequest('Invalid code or account not found')
 
   const stored = await c.env.KV.get(`partner-code:${partner.id}`, 'json') as { code: string; expiresAt: string } | null
   if (!stored) throw badRequest('Code expired — please request a new one')
