@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import React, { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
@@ -17,7 +18,6 @@ import {
   LayoutGrid,
   Menu,
 } from 'lucide-react'
-import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { usePermissions } from '../../context/PermissionsContext'
 import { cn } from '../../lib/cn'
@@ -123,13 +123,33 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
   )
 }
 
+function BottomNavLink({ to, icon, label, exact }: { to: string; icon: React.ReactNode; label: string; exact?: boolean }) {
+  const location = useLocation()
+  const active = exact ? location.pathname === to : location.pathname.startsWith(to)
+  return (
+    <NavLink to={to} end={exact}
+      className={cn(
+        'flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors',
+        active ? 'text-brand-600' : 'text-slate-400',
+      )}
+    >
+      {icon}
+      <span className="text-[10px] font-medium">{label}</span>
+    </NavLink>
+  )
+}
+
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   return (
-    <header className="lg:hidden sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
-      <button onClick={onMenuClick} aria-label="menu">
-        <Menu size={20} />
+    <header className="lg:hidden sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+      <span className="font-bold text-lg">PullUp</span>
+      <button
+        onClick={onMenuClick}
+        aria-label="Open menu"
+        className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300"
+      >
+        <Menu size={22} />
       </button>
-      <span className="font-semibold">PullUp</span>
     </header>
   )
 }
@@ -140,7 +160,21 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen">
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       <Topbar onMenuClick={() => setMobileOpen(true)} />
-      <main className="lg:ml-64 p-4 lg:p-8 max-w-[1400px] mx-auto">{children}</main>
+      <main className="lg:ml-64 p-4 lg:p-8 max-w-[1400px] mx-auto pb-20 lg:pb-8">{children}</main>
+
+      {/* Mobile bottom nav — thumb-friendly quick access */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 flex items-center justify-around px-2 py-2 safe-area-pb">
+        <BottomNavLink to="/" icon={<LayoutDashboard size={22} />} label="Home" exact />
+        <BottomNavLink to="/orders" icon={<Package size={22} />} label="Orders" />
+        <BottomNavLink to="/riders" icon={<Users size={22} />} label="Riders" />
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-400"
+        >
+          <Menu size={22} />
+          <span className="text-[10px] font-medium">More</span>
+        </button>
+      </nav>
     </div>
   )
 }
