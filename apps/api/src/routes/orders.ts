@@ -3,8 +3,9 @@ import { z } from 'zod'
 import type { Env, AppVariables } from '../env'
 import { requireAuth } from '../middleware/access'
 import { getBranchFilter, getRiderFilter } from '../middleware/branchScope'
-import { badRequest, forbidden, notFound, unprocessable } from '../lib/errors'
+import { badRequest, forbidden, gone, notFound, unprocessable } from '../lib/errors'
 import type { AuditActor, Order, OrderStatus } from '@pullup/shared'
+import { computePhysicsCost } from '@pullup/shared'
 import {
   createOrder,
   findOrder,
@@ -17,7 +18,9 @@ import { findOrCreateCustomer } from '../repos/customers'
 import { notifyPartner } from '../services/partnerFetch'
 import { sendPushToUser } from '../services/notifications/push'
 import { sendSms } from '../services/notifications/sms'
+import { sendWhatsApp } from '../services/notifications/whatsapp'
 import { saveProof } from '../services/storage/r2'
+import { listParams } from '../repos/misc'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -364,6 +367,7 @@ app.post('/upload', requireAuth(), async c => {
   const branchId = user.branchId ?? 'default'
   const results: string[] = []
   const errors: string[] = []
+  let locationRequested = 0
 
   // Load pricing params once for all rows
   const [baseFeeRow, rateRow, minRow, weightThreshRow, weightSurchargeRow] = await Promise.all([
@@ -417,14 +421,18 @@ app.post('/upload', requireAuth(), async c => {
     const paymentRaw = col(row, 'payment').toLowerCase()
     const specialInstructions = col(row, 'special') || col(row, 'note') || col(row, 'instruction')
 
-    if (!senderName || !recipientAddress) {
-      errors.push(`Row ${i + 1}: missing sender name or delivery address — skipped`)
+    if (!senderName) {
+      errors.push(`Row ${i + 1}: missing sender name — skipped`)
       continue
     }
+
+    // Use a placeholder destination if none provided — will be filled via location request
+    const effectiveAddress = recipientAddress || 'Awaiting location from recipient'
 
     const paymentMethod = paymentRaw === 'prepaid' ? 'prepaid' : paymentRaw === 'invoice' ? 'invoice' : 'cod'
     const weight = weightStr ? parseFloat(weightStr) : 0
     let cost = costStr ? parseFloat(costStr) : undefined
+    let geocodeFailed = false
 
     // Auto-calculate cost using geocoding if not provided
     if (!cost || isNaN(cost)) {
@@ -437,7 +445,13 @@ app.post('/upload', requireAuth(), async c => {
         if (pickup && dropoff) {
           const distKm = haversine(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng)
           cost = Math.round(calcCost(distKm, !isNaN(weight) ? weight : 0) * 100) / 100
+        } else {
+          geocodeFailed = true
         }
+      } else if (recipientAddress) {
+        geocodeFailed = false // has address, just no API key
+      } else {
+        geocodeFailed = true // no address at all
       }
     }
 
@@ -447,6 +461,7 @@ app.post('/upload', requireAuth(), async c => {
       recipientPhone ? `(${recipientPhone})` : '',
       senderAddress ? `| Pickup: ${senderAddress}` : '',
       specialInstructions ? `| Notes: ${specialInstructions}` : '',
+      geocodeFailed ? '[AWAITING_LOCATION]' : '',
     ].filter(Boolean).join(' ')
 
     try {
@@ -455,7 +470,7 @@ app.post('/upload', requireAuth(), async c => {
         status: 'pending',
         customerName: senderName,
         customerPhone: senderPhone || undefined,
-        destination: recipientAddress,
+        destination: effectiveAddress,
         description: descriptionFull || undefined,
         weight: !isNaN(weight) && weight > 0 ? weight : undefined,
         cost: cost,
@@ -463,6 +478,30 @@ app.post('/upload', requireAuth(), async c => {
         createdBy: user.sub,
       })
       results.push(order.id)
+
+      // If geocoding failed and we have a recipient phone, send WhatsApp/SMS location request
+      if (geocodeFailed && recipientPhone) {
+        try {
+          const token = crypto.randomUUID().replace(/-/g, '')
+          await c.env.KV.put(
+            `loc-req:${token}`,
+            JSON.stringify({ orderId: order.id, recipientPhone, recipientName: recipientName || senderName, senderName, description: description || 'an item' }),
+            { expirationTtl: 60 * 60 * 24 * 7 }, // 7 days
+          )
+          const link = `https://pullupcustomer.aegisassetllc.com/locate?t=${token}`
+          const msg = `Hello${recipientName ? ` ${recipientName}` : ''}, PullUp Delivery is delivering *${description || 'an item'}* on behalf of *${senderName}*. Kindly click the link to share your exact location so we can complete your delivery: ${link}`
+
+          // WhatsApp first (priority), then SMS fallback
+          const waResult = await sendWhatsApp(c.env, recipientPhone, msg)
+          if (!waResult.ok && !waResult.skipped) {
+            await sendSms(c.env, recipientPhone, msg)
+          } else if (waResult.skipped) {
+            await sendSms(c.env, recipientPhone, msg)
+          }
+
+          locationRequested++
+        } catch { /* non-blocking — order is still created */ }
+      }
     } catch (err) {
       errors.push(`Row ${i + 1}: ${(err as Error).message}`)
     }
@@ -471,7 +510,8 @@ app.post('/upload', requireAuth(), async c => {
   return c.json({
     imported: results.length,
     skipped: errors.length,
-    errors: errors.slice(0, 10), // return first 10 errors max
+    locationRequested,
+    errors: errors.slice(0, 10),
   })
 })
 

@@ -228,6 +228,7 @@ export default function OrdersPage() {
                 <StatusBadge status={o.status} />
                 {o.partnerId && !o.cost && <Badge variant="amber">Needs pricing</Badge>}
                 {o.priority === 'urgent' && <Badge variant="red">Urgent</Badge>}
+                {o.description?.includes('[AWAITING_LOCATION]') && <Badge variant="amber">📍 Awaiting location</Badge>}
               </div>
             ),
           },

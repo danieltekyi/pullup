@@ -31,6 +31,7 @@ import CustomerLanding from './pages/customer/CustomerLanding'
 import CustomerLookup from './pages/customer/CustomerLookup'
 import CustomerOrderForm from './pages/customer/CustomerOrderForm'
 import CustomerOrderConfirmation from './pages/customer/CustomerOrderConfirmation'
+import LocatePage from './pages/customer/LocatePage'
 
 type AppMode = 'admin' | 'rider' | 'customer'
 const APP_MODE: AppMode = (import.meta.env.VITE_APP_MODE as AppMode) ?? 'admin'
@@ -107,6 +108,7 @@ function CustomerApp() {
         <Route path="/" element={<CustomerLanding />} />
         <Route path="/order" element={<CustomerOrderForm />} />
         <Route path="/order-confirmation" element={<CustomerOrderConfirmation />} />
+        <Route path="/locate" element={<LocatePage />} />
         <Route path="/track" element={<TrackPage />} />
         <Route path="/lookup" element={<CustomerLookup />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -39,10 +39,11 @@ export default function SettingsPage() {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await api.post<{ imported: number; skipped: number; errors: string[] }>('/api/orders/upload', fd, {
+      const res = await api.post<{ imported: number; skipped: number; locationRequested?: number; errors: string[] }>('/api/orders/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       if (res.data.imported > 0) toast.success(`✅ Imported ${res.data.imported} orders successfully`)
+      if (res.data.locationRequested) toast.info(`📍 ${res.data.locationRequested} recipients sent a WhatsApp/SMS to share their location`)
       if (res.data.skipped > 0) toast.warning(`⚠️ ${res.data.skipped} rows skipped — check the file`)
       if (res.data.errors?.length) res.data.errors.forEach(e => toast.error(e))
     } catch (err) {

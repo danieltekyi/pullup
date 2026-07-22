@@ -177,4 +177,76 @@ app.post('/orders', async c => {
   }
 })
 
+// POST /api/public/location-confirm/:token
+// Called by the LocatePage after recipient shares their GPS
+app.post('/location-confirm/:token', async c => {
+  const body = z.object({ lat: z.number(), lng: z.number() }).parse(await c.req.json())
+  const token = c.req.param('token')
+
+  const stored = await c.env.KV.get(`loc-req:${token}`, 'json') as {
+    orderId: string; senderName: string; description: string
+  } | null
+  if (!stored) return c.json({ error: 'This link has expired or already been used.' }, 410)
+
+  const { orderId, senderName, description: itemDesc } = stored
+
+  // Reverse geocode to get human-readable address
+  let address = `${body.lat.toFixed(6)}, ${body.lng.toFixed(6)}`
+  if (c.env.GOOGLE_MAPS_API_KEY) {
+    try {
+      const geoRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${body.lat},${body.lng}&key=${c.env.GOOGLE_MAPS_API_KEY}`,
+        { signal: AbortSignal.timeout(5000) }
+      )
+      const geo = await geoRes.json<any>()
+      if (geo.status === 'OK' && geo.results[0]) address = geo.results[0].formatted_address
+    } catch { /* fallback to coords */ }
+  }
+
+  // Load the order to get pickup address from description
+  const { findOrder, updateOrder } = await import('../repos/orders')
+  const order = await findOrder(c.env, orderId)
+  if (!order) return c.json({ error: 'Order not found' }, 404)
+
+  // Try to geocode pickup address from description "| Pickup: X |"
+  let cost: number | undefined
+  const pickupMatch = order.description?.match(/Pickup:\s*([^|]+)/)
+  if (pickupMatch?.[1]?.trim() && c.env.GOOGLE_MAPS_API_KEY) {
+    try {
+      const pRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pickupMatch[1].trim())}&region=gh&key=${c.env.GOOGLE_MAPS_API_KEY}`,
+        { signal: AbortSignal.timeout(5000) }
+      )
+      const pd = await pRes.json<any>()
+      if (pd.status === 'OK' && pd.results[0]) {
+        const { lat: pLat, lng: pLng } = pd.results[0].geometry.location
+        const R = 6371
+        const dLat = (body.lat - pLat) * Math.PI / 180
+        const dLng = (body.lng - pLng) * Math.PI / 180
+        const a = Math.sin(dLat/2)**2 + Math.cos(pLat*Math.PI/180)*Math.cos(body.lat*Math.PI/180)*Math.sin(dLng/2)**2
+        const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+        const params = await loadPhysicsParams(c.env)
+        const breakdown = computePhysicsCost(distKm, order.weight ?? 0, params)
+        cost = breakdown.charge
+
+        // Store coords for tracker
+        await c.env.KV.put(
+          `order-coords:${orderId}`,
+          JSON.stringify({ pickupLat: pLat, pickupLng: pLng, dropoffLat: body.lat, dropoffLng: body.lng }),
+          { expirationTtl: 60 * 60 * 24 * 30 }
+        )
+      }
+    } catch { /* skip cost calc */ }
+  }
+
+  // Update order: real address, cost, remove AWAITING_LOCATION marker
+  const cleanDescription = (order.description || '').replace(/\s*\[AWAITING_LOCATION\]/, '')
+  await updateOrder(c.env, orderId, { destination: address, cost, description: cleanDescription })
+
+  // Burn the token
+  await c.env.KV.delete(`loc-req:${token}`)
+
+  return c.json({ ok: true, orderId, address, cost })
+})
+
 export default app
