@@ -1,11 +1,10 @@
-import type { ComponentType } from 'react'
-import { Bike, Copy, ExternalLink, LayoutDashboard, MapPin, ShoppingBag } from 'lucide-react'
+import { Bike, Copy, ExternalLink, LayoutDashboard, MapPin, ShoppingBag, type LucideIcon } from 'lucide-react'
 import { Button, Card, Textarea, toast } from '../components/ui'
 
 interface LaunchpadLink {
   name: string
   url: string
-  icon: ComponentType<{ size?: number; className?: string }>
+  icon: LucideIcon
   iconBg: string
   iconColor: string
 }
