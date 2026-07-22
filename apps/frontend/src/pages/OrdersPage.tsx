@@ -25,8 +25,9 @@ export default function OrdersPage() {
 
   // Rider assign state
   const [riders, setRiders] = useState<RiderItem[]>([])
-  const [assignModal, setAssignModal] = useState<{ orderIds: string[]; label: string } | null>(null)
+  const [assignModal, setAssignModal] = useState<{ orderIds: string[]; label: string; currentCost?: number } | null>(null)
   const [assignRiderId, setAssignRiderId] = useState('')
+  const [assignCost, setAssignCost] = useState('')
   const [assigning, setAssigning] = useState(false)
 
   async function load() {
@@ -66,19 +67,21 @@ export default function OrdersPage() {
     })
   }
 
-  function openAssign(orderIds: string[], label: string) {
+  function openAssign(orderIds: string[], label: string, currentCost?: number) {
     setAssignRiderId('')
-    setAssignModal({ orderIds, label })
+    setAssignCost(currentCost ? String(currentCost) : '')
+    setAssignModal({ orderIds, label, currentCost })
   }
 
   async function submitAssign() {
     if (!assignRiderId || !assignModal) return
     setAssigning(true)
     try {
+      const cost = assignCost ? parseFloat(assignCost) : undefined
       if (assignModal.orderIds.length === 1) {
-        await api.post(`/api/orders/${assignModal.orderIds[0]}/assign`, { riderId: assignRiderId })
+        await api.post(`/api/orders/${assignModal.orderIds[0]}/assign`, { riderId: assignRiderId, ...(cost ? { cost } : {}) })
       } else {
-        await api.post('/api/orders/bulk-assign', { orderIds: assignModal.orderIds, riderId: assignRiderId })
+        await api.post('/api/orders/bulk-assign', { orderIds: assignModal.orderIds, riderId: assignRiderId, ...(cost ? { cost } : {}) })
       }
       toast.success(`Rider assigned to ${assignModal.orderIds.length} order(s)`)
       setSelected(new Set())
@@ -246,7 +249,7 @@ export default function OrdersPage() {
                 </span>
                 {(o.status === 'pending' || o.status === 'assigned') && (
                   <button
-                    onClick={() => openAssign([o.id], o.customerName)}
+                    onClick={() => openAssign([o.id], o.customerName, o.cost ?? undefined)}
                     className="text-xs text-brand-600 hover:text-brand-800 font-semibold whitespace-nowrap"
                   >
                     {o.assignedTo ? 'Reassign' : 'Assign →'}
@@ -297,6 +300,16 @@ export default function OrdersPage() {
               <option key={r.id} value={r.id}>{r.name} ({r.zone})</option>
             ))}
           </Select>
+        </Field>
+        <Field label="Delivery cost (GHS)" hint="Set or update the delivery fee for this order">
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            value={assignCost}
+            onChange={e => setAssignCost(e.target.value)}
+            placeholder="e.g. 45.00"
+          />
         </Field>
         {riders.length === 0 && (
           <p className="text-sm text-amber-600 mt-2">No active riders found. Add riders in the Riders page first.</p>

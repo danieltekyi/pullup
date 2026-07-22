@@ -3,7 +3,7 @@ import type { ChangeEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Order, OrderEvent } from '@pullup/shared'
 import { api, apiErrorMessage } from '../services/api'
-import { Button, Card, Select, StatusBadge, toast } from '../components/ui'
+import { Button, Card, Input, Select, StatusBadge, toast } from '../components/ui'
 import { Bike, CheckCircle2, XCircle, Truck } from 'lucide-react'
 
 interface RiderItem {
@@ -46,6 +46,22 @@ export default function OrderDetailPage() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  const [costEdit, setCostEdit] = useState('')
+  const [savingCost, setSavingCost] = useState(false)
+
+  async function saveCost() {
+    const v = parseFloat(costEdit)
+    if (isNaN(v) || v < 0) return toast.error('Enter a valid cost')
+    setSavingCost(true)
+    try {
+      await api.put(`/api/orders/${id}/cost`, { cost: v })
+      toast.success('Cost updated')
+      load()
+      setCostEdit('')
+    } catch (err) { toast.error(apiErrorMessage(err)) }
+    finally { setSavingCost(false) }
+  }
 
   async function assignRider() {
     if (!selectedRider) return
@@ -122,6 +138,32 @@ export default function OrderDetailPage() {
             <Row label="Created" value={new Date(order.createdAt).toLocaleString()} />
             <Row label="Updated" value={new Date(order.updatedAt).toLocaleString()} />
           </dl>
+
+          {/* Cost editor — always visible for admin */}
+          <div className="mt-6 pt-4 border-t border-slate-100">
+            <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              💰 Delivery Cost
+            </h4>
+            <div className="flex gap-2 items-center">
+              <span className="text-sm text-slate-500 w-32">
+                Current: <strong className="text-slate-900">
+                  {order.cost ? `GHS ${order.cost.toLocaleString()}` : '—'}
+                </strong>
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={costEdit}
+                onChange={e => setCostEdit(e.target.value)}
+                placeholder="Enter new cost"
+                className="w-36"
+              />
+              <Button onClick={saveCost} loading={savingCost} disabled={!costEdit} size="sm">
+                Save cost
+              </Button>
+            </div>
+          </div>
           {(order.status === 'pending' || order.status === 'assigned') && (
             <div className="mt-6 pt-4 border-t border-slate-100">
               <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">

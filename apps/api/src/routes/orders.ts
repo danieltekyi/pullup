@@ -134,6 +134,16 @@ const assignSchema = z.object({
   bikeId: z.string().optional(),
 })
 
+// Update delivery cost (manual override by admin)
+app.put('/:id/cost', requireAuth(), async c => {
+  const body = z.object({ cost: z.number().nonnegative() }).parse(await c.req.json())
+  const order = await findOrder(c.env, c.req.param('id'))
+  if (!order) throw notFound()
+  const updated = await updateOrder(c.env, order.id, { cost: body.cost })
+  await logOrderEvent(c.env, { orderId: order.id, type: 'updated', actor: actorFromCtx(c), before: order, after: updated, note: `Cost set to ${body.cost}` })
+  return c.json(updated)
+})
+
 app.post('/:id/assign', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
@@ -367,6 +377,7 @@ app.post('/upload', requireAuth(), async c => {
     const recipientAddress = col(row, 'recipient_address') || col(row, 'destination')
     const description = col(row, 'description')
     const weightStr = col(row, 'weight')
+    const costStr = col(row, 'cost')
     const paymentRaw = col(row, 'payment').toLowerCase()
     const specialInstructions = col(row, 'special') || col(row, 'note') || col(row, 'instruction')
 
@@ -377,6 +388,7 @@ app.post('/upload', requireAuth(), async c => {
 
     const paymentMethod = paymentRaw === 'prepaid' ? 'prepaid' : paymentRaw === 'invoice' ? 'invoice' : 'cod'
     const weight = weightStr ? parseFloat(weightStr) : undefined
+    const cost = costStr ? parseFloat(costStr) : undefined
     const descriptionFull = [
       description,
       recipientName ? `Recipient: ${recipientName}` : '',
@@ -394,6 +406,7 @@ app.post('/upload', requireAuth(), async c => {
         destination: recipientAddress,
         description: descriptionFull || undefined,
         weight: weight && !isNaN(weight) ? weight : undefined,
+        cost: cost && !isNaN(cost) ? cost : undefined,
         paymentMethod: paymentMethod as 'prepaid' | 'cod' | 'invoice',
         createdBy: user.sub,
       })
