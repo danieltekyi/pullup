@@ -89,7 +89,7 @@ export default function RiderHome() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-24">
+    <div className="min-h-screen bg-slate-100 pb-20">
       <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Package className="text-brand-600" size={22} />
@@ -109,9 +109,6 @@ export default function RiderHome() {
               {pending} to sync
             </span>
           )}
-          <button onClick={logout} className="text-slate-400 p-2" aria-label="sign out">
-            <LogOut size={18} />
-          </button>
         </div>
       </header>
 
@@ -203,6 +200,21 @@ export default function RiderHome() {
           }}
         />
       )}
+
+      {/* Bottom bar — sign out in thumb-friendly zone */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 flex items-center justify-between z-20">
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <Package size={16} className="text-brand-600" />
+          <span className="font-medium text-slate-700">{user?.name}</span>
+        </div>
+        <button
+          onClick={logout}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-sm font-medium text-slate-700"
+        >
+          <LogOut size={16} />
+          Sign out
+        </button>
+      </div>
     </div>
   )
 }
