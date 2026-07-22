@@ -3,6 +3,8 @@ import { z } from 'zod'
 import type { AppVariables, Env } from '../env'
 import { badRequest } from '../lib/errors'
 import { createOrder } from '../repos/orders'
+import { sendSms } from '../services/notifications/sms'
+import { sendEmail } from '../services/notifications/email'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -126,14 +128,46 @@ app.post('/orders', async c => {
       createdBy: 'customer-self-service',
     })
 
-    return c.json(
-      {
-        ok: true,
-        orderId: order.id,
-        trackingUrl: `https://pullupcustomer.aegisassetllc.com/track?orderId=${order.id}`,
-      },
-      201,
-    )
+    const trackingUrl = `https://pullupcustomer.aegisassetllc.com/track?orderId=${order.id}`
+
+    // Store pickup/dropoff coords in KV for the live map tracker
+    if (body.pickupLat && body.pickupLng && body.dropoffLat && body.dropoffLng) {
+      await c.env.KV.put(
+        `order-coords:${order.id}`,
+        JSON.stringify({ pickupLat: body.pickupLat, pickupLng: body.pickupLng, dropoffLat: body.dropoffLat, dropoffLng: body.dropoffLng }),
+        { expirationTtl: 60 * 60 * 24 * 30 }, // 30 days
+      )
+    }
+
+    // Send tracking SMS to RECIPIENT (not sender) — they need to know delivery is coming
+    const smsMessage = `Hi ${body.recipientName}, a delivery from ${body.senderName} is on its way to you via PullUp! Track it here: ${trackingUrl}`
+    const smsSent = await sendSms(c.env, body.recipientPhone, smsMessage)
+
+    // If SMS not configured (no Africa's Talking keys), send email to sender instead
+    if (smsSent.skipped) {
+      console.info(`SMS not configured — skipping recipient notification for order ${order.id}`)
+    }
+
+    // Always send confirmation email to SENDER if we have their info
+    // (uses Resend if configured, otherwise logs)
+    sendEmail(c.env, {
+      to: body.senderPhone.includes('@') ? body.senderPhone : `${body.senderName.toLowerCase().replace(/\s+/g, '')}@noreply.skip`,
+      subject: `PullUp order confirmed — ${order.id.slice(-8).toUpperCase()}`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+        <h2 style="color:#059669">Order received! ✅</h2>
+        <p>Hi <strong>${body.senderName}</strong>, your delivery request has been received.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
+          <tr><td style="padding:6px 0;color:#64748b">Order ID</td><td><strong>${order.id}</strong></td></tr>
+          <tr><td style="padding:6px 0;color:#64748b">Recipient</td><td>${body.recipientName} (${body.recipientPhone})</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b">Delivering to</td><td>${body.recipientAddress}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b">Payment</td><td>${body.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Prepaid'}</td></tr>
+        </table>
+        <a href="${trackingUrl}" style="display:inline-block;padding:12px 24px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600">Track delivery</a>
+        <p style="font-size:12px;color:#94a3b8;margin-top:24px">Share this tracking link with your recipient: ${trackingUrl}</p>
+      </div>`,
+    }).catch(() => {}) // non-blocking
+
+    return c.json({ ok: true, orderId: order.id, trackingUrl }, 201)
   } catch (err) {
     if (err instanceof z.ZodError) {
       throw badRequest('Invalid order request', err.flatten())

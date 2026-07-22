@@ -5,6 +5,7 @@ import { PermissionsProvider } from './context/PermissionsContext'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { LayoutWithSidebar } from './components/layout/Layout'
 import { ToastViewport } from './components/ui'
+import { InstallPrompt } from './components/InstallPrompt'
 import { startOnlineListener } from './offline/sync'
 
 import LoginPage from './pages/LoginPage'
@@ -131,5 +132,10 @@ export default function App() {
         </PermissionsProvider>
       </AuthProvider>
     )
-  return shell
+  return (
+    <>
+      {shell}
+      <InstallPrompt />
+    </>
+  )
 }
