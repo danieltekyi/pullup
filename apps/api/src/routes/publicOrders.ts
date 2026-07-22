@@ -30,20 +30,20 @@ app.get('/orders/estimate', async c => {
     return c.json({ error: 'lat1, lng1, lat2, lng2 required' }, 400)
   }
 
-  const coords = [lat1, lng1, lat2, lng2].map(value => Number.parseFloat(value))
-  if (coords.some(value => Number.isNaN(value))) {
-    return c.json({ error: 'lat1, lng1, lat2, lng2 must be valid numbers' }, 400)
+  const coords = [lat1, lng1, lat2, lng2].map(v => Number.parseFloat(v))
+  if (coords.some(v => Number.isNaN(v))) {
+    return c.json({ error: 'coords must be valid numbers' }, 400)
   }
 
   const [pickupLat, pickupLng, dropoffLat, dropoffLng] = coords
   const weightKg = weight ? Number.parseFloat(weight) : 0
 
   const [baseFeeRow, rateRow, minRow, weightThresholdRow, weightSurchargeRow] = await Promise.all([
-    c.env.DB.prepare("SELECT value FROM params WHERE key = 'base_fee' AND category = 'delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key = 'rate_per_km' AND category = 'delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key = 'min_fee' AND category = 'delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key = 'weight_threshold' AND category = 'delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key = 'weight_surcharge' AND category = 'delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='base_fee' AND category='delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='rate_per_km' AND category='delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='min_fee' AND category='delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='weight_threshold' AND category='delivery'").first<{ value: string }>(),
+    c.env.DB.prepare("SELECT value FROM params WHERE key='weight_surcharge' AND category='delivery'").first<{ value: string }>(),
   ])
 
   const baseFee = Number.parseFloat(baseFeeRow?.value ?? '25')
@@ -52,33 +52,61 @@ app.get('/orders/estimate', async c => {
   const weightThreshold = Number.parseFloat(weightThresholdRow?.value ?? '5')
   const weightSurcharge = Number.parseFloat(weightSurchargeRow?.value ?? '10')
 
-  // Haversine distance
-  const earthRadiusKm = 6371
-  const dLat = ((dropoffLat - pickupLat) * Math.PI) / 180
-  const dLng = ((dropoffLng - pickupLng) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((pickupLat * Math.PI) / 180) * Math.cos((dropoffLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  const distanceKm = earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  const roundedDistanceKm = Math.round(distanceKm * 10) / 10
+  // --- Road distance via Google Distance Matrix API ---
+  let distanceKm: number
+  let etaMinutes: number
+  let usingRoadDistance = false
 
-  // Weight surcharge (only over threshold)
+  if (c.env.GOOGLE_MAPS_API_KEY) {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${pickupLat},${pickupLng}&destinations=${dropoffLat},${dropoffLng}&mode=driving&key=${c.env.GOOGLE_MAPS_API_KEY}`
+      const res = await fetch(url, { signal: AbortSignal.timeout(5_000) })
+      const data = await res.json<{
+        status: string
+        rows: Array<{ elements: Array<{ status: string; distance: { value: number }; duration: { value: number } }> }>
+      }>()
+      const el = data.rows?.[0]?.elements?.[0]
+      if (data.status === 'OK' && el?.status === 'OK') {
+        distanceKm = Math.round((el.distance.value / 1000) * 10) / 10
+        // Google returns duration in seconds — add 10 min pickup buffer
+        etaMinutes = Math.round(el.duration.value / 60) + 10
+        usingRoadDistance = true
+      } else {
+        throw new Error(`Distance Matrix: ${el?.status ?? data.status}`)
+      }
+    } catch (err) {
+      console.warn('Distance Matrix API failed, falling back to Haversine:', (err as Error).message)
+      // Fall through to Haversine
+    }
+  }
+
+  // --- Haversine fallback ---
+  if (!usingRoadDistance) {
+    const R = 6371
+    const dLat = ((dropoffLat - pickupLat) * Math.PI) / 180
+    const dLng = ((dropoffLng - pickupLng) * Math.PI) / 180
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos((pickupLat * Math.PI) / 180) * Math.cos((dropoffLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+    distanceKm = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10
+    etaMinutes = Math.round((distanceKm / 25) * 60 + 10) // 25 km/h average + 10 min pickup
+  }
+
+  const etaText = etaMinutes! < 60
+    ? `~${etaMinutes} min`
+    : `~${Math.floor(etaMinutes! / 60)}h ${etaMinutes! % 60}min`
+
   const weightExtra = weightKg > weightThreshold ? weightSurcharge : 0
-
-  const cost = Math.max(minFee, baseFee + distanceKm * ratePerKm + weightExtra)
+  const cost = Math.max(minFee, baseFee + distanceKm! * ratePerKm + weightExtra)
 
   return c.json({
-    distanceKm: roundedDistanceKm,
+    distanceKm: distanceKm!,
     cost: Math.round(cost * 100) / 100,
     currency: 'GHS',
+    etaMinutes: etaMinutes!,
+    etaText,
+    usingRoadDistance,
     weightSurcharge: weightExtra,
-    breakdown: {
-      baseFee,
-      ratePerKm,
-      distanceKm: roundedDistanceKm,
-      weightKg,
-      weightSurcharge: weightExtra,
-    },
+    breakdown: { baseFee, ratePerKm, distanceKm: distanceKm!, weightKg, weightSurcharge: weightExtra },
   })
 })
 
