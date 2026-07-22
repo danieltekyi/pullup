@@ -62,6 +62,14 @@ export function AddressAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null)
   const autocompleteRef = useRef<GoogleAutocompleteInstance | null>(null)
 
+  // Keep the DOM input in sync when value is set externally (e.g. form reset)
+  // but don't fight Google Places which writes to the DOM directly.
+  useEffect(() => {
+    if (inputRef.current && inputRef.current.value !== value) {
+      inputRef.current.value = value
+    }
+  }, [value])
+
   const initAutocomplete = useCallback(() => {
     if (!inputRef.current || !window.google?.maps?.places || autocompleteRef.current) return
 
@@ -73,9 +81,10 @@ export function AddressAutocomplete({
       const place = autocomplete.getPlace()
       if (!place.formatted_address) return
 
+      // Update React state with the selected address
       onChange(place.formatted_address)
-      if (!place.geometry?.location) return
 
+      if (!place.geometry?.location) return
       onPlaceSelect({
         address: place.formatted_address,
         lat: place.geometry.location.lat(),
@@ -118,7 +127,9 @@ export function AddressAutocomplete({
       ref={inputRef}
       id={id}
       type="text"
-      value={value}
+      // Use defaultValue (uncontrolled) so Google Places can write to the DOM freely.
+      // We sync externally via the useEffect above.
+      defaultValue={value}
       onChange={event => onChange(event.target.value)}
       placeholder={placeholder}
       required={required}
