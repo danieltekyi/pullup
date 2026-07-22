@@ -311,6 +311,105 @@ app.post('/:id/proof/:kind', requireAuth(), async c => {
   }
 })
 
+// CSV/Excel import — parses the PullUp bulk order template
+// Accepts CSV text. Columns match the template headers (case-insensitive).
+app.post('/upload', requireAuth(), async c => {
+  const form = await c.req.formData()
+  const file = form.get('file') as File | null
+  if (!file || typeof file === 'string') throw badRequest('file required')
+
+  const text = await file.text()
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) throw badRequest('File must have a header row and at least one data row')
+
+  // Parse CSV respecting quoted fields
+  function parseCsvLine(line: string): string[] {
+    const result: string[] = []
+    let current = ''
+    let inQuote = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') { current += '"'; i++ }
+        else inQuote = !inQuote
+      } else if (ch === ',' && !inQuote) {
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+    result.push(current.trim())
+    return result
+  }
+
+  const headers = parseCsvLine(lines[0]).map(h => h.replace(/\s*\*/g, '').toLowerCase().replace(/\s+/g, '_'))
+
+  function col(row: string[], name: string): string {
+    const idx = headers.findIndex(h => h.includes(name))
+    return idx >= 0 ? (row[idx] ?? '').trim() : ''
+  }
+
+  const user = c.get('user')!
+  const branchId = user.branchId ?? 'default'
+  const results: string[] = []
+  const errors: string[] = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCsvLine(lines[i])
+    if (row.every(c => !c)) continue // skip empty rows
+
+    const senderName = col(row, 'sender_name') || col(row, 'customer')
+    const recipientName = col(row, 'recipient_name')
+    const recipientPhone = col(row, 'recipient_phone')
+    const senderPhone = col(row, 'sender_phone') || col(row, 'phone')
+    const senderAddress = col(row, 'sender_address')
+    const recipientAddress = col(row, 'recipient_address') || col(row, 'destination')
+    const description = col(row, 'description')
+    const weightStr = col(row, 'weight')
+    const paymentRaw = col(row, 'payment').toLowerCase()
+    const specialInstructions = col(row, 'special') || col(row, 'note') || col(row, 'instruction')
+
+    if (!senderName || !recipientAddress) {
+      errors.push(`Row ${i + 1}: missing sender name or delivery address — skipped`)
+      continue
+    }
+
+    const paymentMethod = paymentRaw === 'prepaid' ? 'prepaid' : paymentRaw === 'invoice' ? 'invoice' : 'cod'
+    const weight = weightStr ? parseFloat(weightStr) : undefined
+    const descriptionFull = [
+      description,
+      recipientName ? `Recipient: ${recipientName}` : '',
+      recipientPhone ? `(${recipientPhone})` : '',
+      senderAddress ? `| Pickup: ${senderAddress}` : '',
+      specialInstructions ? `| Notes: ${specialInstructions}` : '',
+    ].filter(Boolean).join(' ')
+
+    try {
+      const order = await createOrder(c.env, {
+        branchId,
+        status: 'pending',
+        customerName: senderName,
+        customerPhone: senderPhone || undefined,
+        destination: recipientAddress,
+        description: descriptionFull || undefined,
+        weight: weight && !isNaN(weight) ? weight : undefined,
+        paymentMethod: paymentMethod as 'prepaid' | 'cod' | 'invoice',
+        createdBy: user.sub,
+      })
+      results.push(order.id)
+    } catch (err) {
+      errors.push(`Row ${i + 1}: ${(err as Error).message}`)
+    }
+  }
+
+  return c.json({
+    imported: results.length,
+    skipped: errors.length,
+    errors: errors.slice(0, 10), // return first 10 errors max
+  })
+})
+
 // CSV export
 app.get('/export.csv', requireAuth(), async c => {
   const branchId = getBranchFilter(c)
