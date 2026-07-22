@@ -83,10 +83,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     try { localStorage.removeItem('rider_session') } catch {}
-    // Clear user state immediately → RiderApp shows login form without page reload
+    // Clear user state immediately → shows login form without any redirect
     setUser(null)
-    // For admin: also sign out of Cloudflare Access
-    if (!import.meta.env.VITE_APP_MODE || import.meta.env.VITE_APP_MODE === 'admin') {
+    // Admin only: sign out of Cloudflare Access
+    // In rider mode (IS_RIDER_APP=true), setting user=null is enough — login form re-appears
+    if (!IS_RIDER_APP) {
       logoutApi()
     }
   }
