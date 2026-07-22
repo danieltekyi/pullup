@@ -36,6 +36,14 @@ app.use('*', async (c, next) => {
   return corsMw(c, next)
 })
 
+// Returns public config (Maps key) — safe because Maps key is restricted by referrer
+app.get('/api/public/config', c => {
+  return c.json({
+    mapsApiKey: c.env.GOOGLE_MAPS_API_KEY ?? null,
+    currency: 'GHS',
+  })
+})
+
 app.use('*', accessAuth())
 
 app.get('/health', c => c.json({ ok: true, service: 'pullup-api', env: c.env.CF_ACCESS_TEAM_DOMAIN }))

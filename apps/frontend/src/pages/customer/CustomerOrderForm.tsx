@@ -1,6 +1,7 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Package, MapPin, Truck } from 'lucide-react'
+import { ArrowLeft, LoaderCircle, MapPin, Package, Truck } from 'lucide-react'
+import { AddressAutocomplete } from '../../components/AddressAutocomplete'
 import { Button, Field, Input, Textarea, toast } from '../../components/ui'
 import { api, apiErrorMessage } from '../../services/api'
 
@@ -15,6 +16,20 @@ interface OrderFormState {
   weight: string
   paymentMethod: 'cod' | 'prepaid'
   specialInstructions: string
+  pickupLat: number | null
+  pickupLng: number | null
+  dropoffLat: number | null
+  dropoffLng: number | null
+}
+
+interface DeliveryEstimate {
+  cost: number
+  distanceKm: number
+  breakdown: {
+    baseFee: number
+    ratePerKm: number
+    distanceKm: number
+  }
 }
 
 const initialForm: OrderFormState = {
@@ -28,12 +43,55 @@ const initialForm: OrderFormState = {
   weight: '',
   paymentMethod: 'cod',
   specialInstructions: '',
+  pickupLat: null,
+  pickupLng: null,
+  dropoffLat: null,
+  dropoffLng: null,
 }
 
 export default function CustomerOrderForm() {
   const nav = useNavigate()
   const [form, setForm] = useState<OrderFormState>(initialForm)
   const [loading, setLoading] = useState(false)
+  const [mapsApiKey, setMapsApiKey] = useState<string | null>(null)
+  const [estimate, setEstimate] = useState<DeliveryEstimate | null>(null)
+  const [estimating, setEstimating] = useState(false)
+
+  useEffect(() => {
+    api
+      .get<{ mapsApiKey: string | null }>('/api/public/config')
+      .then(response => setMapsApiKey(response.data.mapsApiKey))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (form.pickupLat === null || form.pickupLng === null || form.dropoffLat === null || form.dropoffLng === null) {
+      setEstimate(null)
+      setEstimating(false)
+      return
+    }
+
+    let cancelled = false
+    setEstimating(true)
+
+    api
+      .get<DeliveryEstimate>(
+        `/api/public/orders/estimate?lat1=${form.pickupLat}&lng1=${form.pickupLng}&lat2=${form.dropoffLat}&lng2=${form.dropoffLng}`,
+      )
+      .then(response => {
+        if (!cancelled) setEstimate(response.data)
+      })
+      .catch(() => {
+        if (!cancelled) setEstimate(null)
+      })
+      .finally(() => {
+        if (!cancelled) setEstimating(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [form.pickupLat, form.pickupLng, form.dropoffLat, form.dropoffLng])
 
   function update<K extends keyof OrderFormState>(key: K, value: OrderFormState[K]) {
     setForm(current => ({ ...current, [key]: value }))
@@ -60,6 +118,11 @@ export default function CustomerOrderForm() {
         weight: form.weight ? Number(form.weight) : undefined,
         paymentMethod: form.paymentMethod,
         specialInstructions: form.specialInstructions.trim() || undefined,
+        estimatedCost: estimate?.cost,
+        pickupLat: form.pickupLat ?? undefined,
+        pickupLng: form.pickupLng ?? undefined,
+        dropoffLat: form.dropoffLat ?? undefined,
+        dropoffLng: form.dropoffLng ?? undefined,
       }
       const res = await api.post<{ ok: true; orderId: string; trackingUrl: string }>('/api/public/orders', payload)
       nav(`/order-confirmation?orderId=${encodeURIComponent(res.data.orderId)}`)
@@ -121,16 +184,52 @@ export default function CustomerOrderForm() {
                 </Field>
 
                 <Field label="Pickup address" required>
-                  <Textarea
+                  <AddressAutocomplete
+                    id="pickup-address"
                     value={form.senderAddress}
-                    onChange={onInputChange('senderAddress')}
+                    onChange={value =>
+                      setForm(current => ({
+                        ...current,
+                        senderAddress: value,
+                        pickupLat: null,
+                        pickupLng: null,
+                      }))
+                    }
+                    onPlaceSelect={place =>
+                      setForm(current => ({
+                        ...current,
+                        senderAddress: place.address,
+                        pickupLat: place.lat,
+                        pickupLng: place.lng,
+                      }))
+                    }
                     placeholder="Street, landmark, area"
-                    rows={4}
+                    apiKey={mapsApiKey}
                     required
                   />
                 </Field>
               </div>
             </section>
+
+            {(estimate || estimating) && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-600">Estimated delivery cost</p>
+                {estimate ? (
+                  <>
+                    <p className="text-3xl font-bold text-emerald-700">GHS {estimate.cost.toFixed(2)}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {estimate.distanceKm} km · Base GHS {estimate.breakdown.baseFee} + GHS {estimate.breakdown.ratePerKm}/km
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">Final cost confirmed by our team</p>
+                  </>
+                ) : (
+                  <p className="inline-flex items-center gap-2 text-sm text-emerald-700">
+                    <LoaderCircle size={16} className="animate-spin" />
+                    Calculating estimate...
+                  </p>
+                )}
+              </div>
+            )}
 
             <section className="rounded-2xl border border-slate-200 p-5">
               <div className="mb-5 flex items-center gap-3">
@@ -160,11 +259,27 @@ export default function CustomerOrderForm() {
                 </Field>
 
                 <Field label="Delivery address" required>
-                  <Textarea
+                  <AddressAutocomplete
+                    id="delivery-address"
                     value={form.recipientAddress}
-                    onChange={onInputChange('recipientAddress')}
+                    onChange={value =>
+                      setForm(current => ({
+                        ...current,
+                        recipientAddress: value,
+                        dropoffLat: null,
+                        dropoffLng: null,
+                      }))
+                    }
+                    onPlaceSelect={place =>
+                      setForm(current => ({
+                        ...current,
+                        recipientAddress: place.address,
+                        dropoffLat: place.lat,
+                        dropoffLng: place.lng,
+                      }))
+                    }
                     placeholder="Where should we deliver it?"
-                    rows={4}
+                    apiKey={mapsApiKey}
                     required
                   />
                 </Field>
