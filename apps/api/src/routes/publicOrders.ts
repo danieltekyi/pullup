@@ -130,11 +130,14 @@ app.post('/orders', async c => {
 
     const trackingUrl = `https://pullupcustomer.aegisassetllc.com/track?orderId=${order.id}`
 
-    // Store pickup/dropoff coords in KV for the live map tracker
+    // Store pickup/dropoff coords + ETA in KV for the live map tracker
     if (body.pickupLat && body.pickupLng && body.dropoffLat && body.dropoffLng) {
       await c.env.KV.put(
         `order-coords:${order.id}`,
-        JSON.stringify({ pickupLat: body.pickupLat, pickupLng: body.pickupLng, dropoffLat: body.dropoffLat, dropoffLng: body.dropoffLng }),
+        JSON.stringify({ 
+          pickupLat: body.pickupLat, pickupLng: body.pickupLng, 
+          dropoffLat: body.dropoffLat, dropoffLng: body.dropoffLng,
+        }),
         { expirationTtl: 60 * 60 * 24 * 30 }, // 30 days
       )
     }

@@ -47,6 +47,30 @@ export default function RiderHome() {
     }
   }, [])
 
+  // Send GPS location every 30s for active (picked_up / in_transit) orders
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const gpsInterval = setInterval(() => {
+      setOrders(current => {
+        const active = current.find(o => o.status === 'picked_up' || o.status === 'in_transit')
+        if (!active) return current
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            api.post('/api/rider-location', {
+              orderId: active.id,
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            }).catch(() => {})
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 5000 },
+        )
+        return current
+      })
+    }, 30_000)
+    return () => clearInterval(gpsInterval)
+  }, [])
+
   async function markStatus(order: Order, status: Order['status']) {
     try {
       if (navigator.onLine) {

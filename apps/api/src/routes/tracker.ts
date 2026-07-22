@@ -83,7 +83,8 @@ app.post('/validate', async c => {
     if (['confirmed', 'delivered', 'rejected'].includes(order.status)) {
       throw gone('tracking link expired — delivery complete')
     }
-    return c.json({ ok: true, orderId: order.id, orderStatus: order.status, bikeId: order.bikeId })
+    const coords = await c.env.KV.get(`order-coords:${order.id}`, 'json') as { pickupLat?: number; pickupLng?: number; dropoffLat?: number; dropoffLng?: number; etaMinutes?: number; etaText?: string } | null
+    return c.json({ ok: true, orderId: order.id, orderStatus: order.status, bikeId: order.bikeId, destination: order.destination, customerName: order.customerName, ...coords })
   }
 
   try {
@@ -93,7 +94,8 @@ app.post('/validate', async c => {
     if (['confirmed', 'delivered', 'rejected'].includes(order.status)) {
       throw gone('tracking link expired — delivery complete')
     }
-    return c.json({ ok: true, orderId: order.id, orderStatus: order.status, bikeId: payload.bikeId, logoUrl: payload.logoUrl })
+    const coords = await c.env.KV.get(`order-coords:${order.id}`, 'json') as { pickupLat?: number; pickupLng?: number; dropoffLat?: number; dropoffLng?: number; etaMinutes?: number; etaText?: string } | null
+    return c.json({ ok: true, orderId: order.id, orderStatus: order.status, bikeId: payload.bikeId, logoUrl: payload.logoUrl, destination: order.destination, customerName: order.customerName, ...coords })
   } catch (err) {
     const name = (err as Error).name
     if (name === 'JWTExpired' || name === 'JWSInvalid' || name === 'JWSSignatureVerificationFailed') {
