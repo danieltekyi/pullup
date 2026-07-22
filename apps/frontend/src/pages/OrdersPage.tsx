@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Filter, Download, Upload, RefreshCw, X } from 'lucide-react'
+import { Search, Filter, Download, Upload, RefreshCw, X, UserCheck } from 'lucide-react'
 import type { Order, OrderStatus } from '@pullup/shared'
 import { api, apiErrorMessage } from '../services/api'
-import { Badge, Button, Card, Field, Input, Select, StatusBadge, Table, toast } from '../components/ui'
+import { Badge, Button, Card, Field, Input, Modal, Select, StatusBadge, Table, toast } from '../components/ui'
+
+interface RiderItem { id: string; name: string; zone: string }
 
 const STATUS_OPTIONS: OrderStatus[] = [
-  'pending',
-  'assigned',
-  'picked_up',
-  'in_transit',
-  'delivered',
-  'awaiting_confirmation',
-  'confirmed',
-  'rejected',
-  'failed',
-  'cancelled',
+  'pending', 'assigned', 'picked_up', 'in_transit', 'delivered',
+  'awaiting_confirmation', 'confirmed', 'rejected', 'failed', 'cancelled',
 ]
 
 export default function OrdersPage() {
@@ -29,6 +23,12 @@ export default function OrdersPage() {
   const [cursor, setCursor] = useState<string | undefined>()
   const [nextCursor, setNextCursor] = useState<string | undefined>()
 
+  // Rider assign state
+  const [riders, setRiders] = useState<RiderItem[]>([])
+  const [assignModal, setAssignModal] = useState<{ orderIds: string[]; label: string } | null>(null)
+  const [assignRiderId, setAssignRiderId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
   async function load() {
     setLoading(true)
     try {
@@ -38,9 +38,13 @@ export default function OrdersPage() {
       if (from) params.set('from', from)
       if (to) params.set('to', to)
       if (cursor) params.set('cursor', cursor)
-      const res = await api.get<{ items: Order[]; cursor?: string }>(`/api/orders?${params}`)
+      const [res, ridersRes] = await Promise.all([
+        api.get<{ items: Order[]; cursor?: string }>(`/api/orders?${params}`),
+        riders.length ? Promise.resolve(null) : api.get<{ items: RiderItem[] }>('/api/riders?status=active&limit=100'),
+      ])
       setOrders(res.data.items)
       setNextCursor(res.data.cursor)
+      if (ridersRes) setRiders(ridersRes.data.items)
     } catch (err) {
       toast.error(apiErrorMessage(err))
     } finally {
@@ -62,17 +66,28 @@ export default function OrdersPage() {
     })
   }
 
-  async function bulkAssign() {
-    if (!selectedIds.length) return toast.warning('Select orders first')
-    const riderId = window.prompt('Rider ID to assign?') ?? ''
-    if (!riderId) return
+  function openAssign(orderIds: string[], label: string) {
+    setAssignRiderId('')
+    setAssignModal({ orderIds, label })
+  }
+
+  async function submitAssign() {
+    if (!assignRiderId || !assignModal) return
+    setAssigning(true)
     try {
-      await api.post('/api/orders/bulk-assign', { orderIds: selectedIds, riderId })
-      toast.success(`Assigned ${selectedIds.length} orders`)
+      if (assignModal.orderIds.length === 1) {
+        await api.post(`/api/orders/${assignModal.orderIds[0]}/assign`, { riderId: assignRiderId })
+      } else {
+        await api.post('/api/orders/bulk-assign', { orderIds: assignModal.orderIds, riderId: assignRiderId })
+      }
+      toast.success(`Rider assigned to ${assignModal.orderIds.length} order(s)`)
       setSelected(new Set())
+      setAssignModal(null)
       load()
     } catch (err) {
       toast.error(apiErrorMessage(err))
+    } finally {
+      setAssigning(false)
     }
   }
 
@@ -149,14 +164,8 @@ export default function OrdersPage() {
           </Field>
           <div className="flex items-end gap-2">
             <Button type="submit" icon={<Filter size={14} />}>Apply</Button>
-            <Button
-              type="button"
-              variant="ghost"
-              icon={<X size={14} />}
-              onClick={() => {
-                setQ(''); setStatusFilter(''); setFrom(''); setTo(''); setCursor(undefined)
-              }}
-            >
+            <Button type="button" variant="ghost" icon={<X size={14} />}
+              onClick={() => { setQ(''); setStatusFilter(''); setFrom(''); setTo(''); setCursor(undefined) }}>
               Clear
             </Button>
           </div>
@@ -167,7 +176,10 @@ export default function OrdersPage() {
         <div className="flex items-center justify-between bg-brand-50 border border-brand-100 rounded-lg px-4 py-2.5">
           <span className="text-sm font-medium text-brand-700">{selectedIds.length} selected</span>
           <div className="flex gap-2">
-            <Button size="sm" onClick={bulkAssign}>Bulk assign</Button>
+            <Button size="sm" icon={<UserCheck size={14} />}
+              onClick={() => openAssign(selectedIds, `${selectedIds.length} selected orders`)}>
+              Assign rider
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
           </div>
         </div>
@@ -180,24 +192,17 @@ export default function OrdersPage() {
         emptyMessage="No orders match those filters"
         columns={[
           {
-            key: 'sel',
-            width: 40,
+            key: 'sel', width: 40,
             header: (
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 checked={orders.length > 0 && orders.every(o => selected.has(o.id))}
-                onChange={e => {
-                  setSelected(e.target.checked ? new Set(orders.map(o => o.id)) : new Set())
-                }}
+                onChange={e => setSelected(e.target.checked ? new Set(orders.map(o => o.id)) : new Set())}
               />
             ),
-            render: o => (
-              <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} />
-            ),
+            render: o => <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} />,
           },
           {
-            key: 'id',
-            header: 'ID',
+            key: 'id', header: 'ID',
             render: o => (
               <Link to={`/orders/${o.id}`} className="font-mono text-xs text-brand-600 hover:underline">
                 {o.id.slice(0, 20)}
@@ -205,8 +210,7 @@ export default function OrdersPage() {
             ),
           },
           {
-            key: 'customer',
-            header: 'Customer',
+            key: 'customer', header: 'Customer',
             render: o => (
               <div>
                 <p className="font-medium">{o.customerName}</p>
@@ -215,8 +219,7 @@ export default function OrdersPage() {
             ),
           },
           {
-            key: 'status',
-            header: 'Status',
+            key: 'status', header: 'Status',
             render: o => (
               <div className="flex flex-col gap-1">
                 <StatusBadge status={o.status} />
@@ -226,8 +229,7 @@ export default function OrdersPage() {
             ),
           },
           {
-            key: 'zone',
-            header: 'Destination',
+            key: 'zone', header: 'Destination',
             render: o => (
               <div className="text-sm">
                 <p>{o.destination}</p>
@@ -236,18 +238,29 @@ export default function OrdersPage() {
             ),
           },
           {
-            key: 'assigned',
-            header: 'Rider',
-            render: o => <span className="text-sm text-slate-600">{o.assignedTo?.slice(0, 12) || '—'}</span>,
+            key: 'assigned', header: 'Rider',
+            render: o => (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">
+                  {riders.find(r => r.id === o.assignedTo)?.name || o.assignedTo?.slice(0, 12) || '—'}
+                </span>
+                {(o.status === 'pending' || o.status === 'assigned') && (
+                  <button
+                    onClick={() => openAssign([o.id], o.customerName)}
+                    className="text-xs text-brand-600 hover:text-brand-800 font-semibold whitespace-nowrap"
+                  >
+                    {o.assignedTo ? 'Reassign' : 'Assign →'}
+                  </button>
+                )}
+              </div>
+            ),
           },
           {
-            key: 'cost',
-            header: 'Cost',
+            key: 'cost', header: 'Cost',
             render: o => <span className="font-semibold">{o.cost ? o.cost.toLocaleString() : '—'}</span>,
           },
           {
-            key: 'created',
-            header: 'Created',
+            key: 'created', header: 'Created',
             render: o => <span className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleString()}</span>,
           },
         ]}
@@ -258,11 +271,39 @@ export default function OrdersPage() {
           Refresh
         </Button>
         {nextCursor && (
-          <Button variant="secondary" onClick={() => setCursor(nextCursor)}>
-            Load more →
-          </Button>
+          <Button variant="ghost" onClick={() => setCursor(nextCursor)}>Load more</Button>
         )}
       </div>
+
+      {/* Assign rider modal */}
+      <Modal
+        open={!!assignModal}
+        onClose={() => setAssignModal(null)}
+        title={`Assign rider — ${assignModal?.label}`}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setAssignModal(null)}>Cancel</Button>
+            <Button onClick={submitAssign} loading={assigning} disabled={!assignRiderId}
+              icon={<UserCheck size={14} />}>
+              Assign
+            </Button>
+          </div>
+        }
+      >
+        <Field label="Select rider" required>
+          <Select value={assignRiderId} onChange={e => setAssignRiderId(e.target.value)}>
+            <option value="">— choose a rider —</option>
+            {riders.map(r => (
+              <option key={r.id} value={r.id}>{r.name} ({r.zone})</option>
+            ))}
+          </Select>
+        </Field>
+        {riders.length === 0 && (
+          <p className="text-sm text-amber-600 mt-2">No active riders found. Add riders in the Riders page first.</p>
+        )}
+      </Modal>
     </div>
   )
 }
+
+
