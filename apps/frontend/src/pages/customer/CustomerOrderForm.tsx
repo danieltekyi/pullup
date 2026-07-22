@@ -28,13 +28,14 @@ interface DeliveryEstimate {
   etaMinutes: number
   etaText: string
   usingRoadDistance: boolean
-  weightSurcharge: number
   breakdown: {
-    baseFee: number
-    ratePerKm: number
+    fuelCost: number
+    wearCost: number
+    fixedCost: number
+    rawCost: number
+    marginAmount: number
     distanceKm: number
     weightKg: number
-    weightSurcharge: number
   }
 }
 
@@ -224,10 +225,10 @@ export default function CustomerOrderForm() {
                   <>
                     <p className="text-3xl font-bold text-emerald-700">GHS {estimate.cost.toFixed(2)}</p>
                     <p className="text-sm font-semibold text-emerald-600 mt-1">⏱ {estimate.etaText} estimated delivery</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {estimate.distanceKm} km {estimate.usingRoadDistance ? '(road)' : '(approx)'} · Base GHS {estimate.breakdown.baseFee} + GHS {estimate.breakdown.ratePerKm}/km{estimate.weightSurcharge ? ` + GHS ${estimate.weightSurcharge} heavy item` : ''}
+                    <p className="text-xs text-slate-500 mt-1">
+                      {estimate.distanceKm} km {estimate.usingRoadDistance ? '(road)' : '(approx)'}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">Final cost confirmed by our team</p>
+                    <p className="text-xs text-slate-400 mt-1">Final cost confirmed by our team</p>
                   </>
                 ) : (
                   <p className="inline-flex items-center gap-2 text-sm text-emerald-700">

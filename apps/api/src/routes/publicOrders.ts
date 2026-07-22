@@ -5,6 +5,8 @@ import { badRequest } from '../lib/errors'
 import { createOrder } from '../repos/orders'
 import { sendSms } from '../services/notifications/sms'
 import { sendEmail } from '../services/notifications/email'
+import { computePhysicsCost } from '@pullup/shared'
+import { loadPhysicsParams } from '../lib/physicsPricing'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -39,24 +41,13 @@ app.get('/orders/estimate', async c => {
 
   const [pickupLat, pickupLng, dropoffLat, dropoffLng] = coords
   const weightKg = weight ? Number.parseFloat(weight) : 0
-
-  const [baseFeeRow, rateRow, minRow, weightThresholdRow, weightSurchargeRow] = await Promise.all([
-    c.env.DB.prepare("SELECT value FROM params WHERE key='base_fee' AND category='delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key='rate_per_km' AND category='delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key='min_fee' AND category='delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key='weight_threshold' AND category='delivery'").first<{ value: string }>(),
-    c.env.DB.prepare("SELECT value FROM params WHERE key='weight_surcharge' AND category='delivery'").first<{ value: string }>(),
-  ])
-
-  const baseFee = Number.parseFloat(baseFeeRow?.value ?? '25')
-  const ratePerKm = Number.parseFloat(rateRow?.value ?? '3')
-  const minFee = Number.parseFloat(minRow?.value ?? '20')
-  const weightThreshold = Number.parseFloat(weightThresholdRow?.value ?? '5')
-  const weightSurcharge = Number.parseFloat(weightSurchargeRow?.value ?? '10')
+  if (Number.isNaN(weightKg)) {
+    return c.json({ error: 'weight must be a valid number' }, 400)
+  }
 
   // --- Road distance via Google Distance Matrix API ---
-  let distanceKm: number
-  let etaMinutes: number
+  let distanceKm = 0
+  let etaMinutes = 0
   let usingRoadDistance = false
 
   if (c.env.GOOGLE_MAPS_API_KEY) {
@@ -97,18 +88,25 @@ app.get('/orders/estimate', async c => {
     ? `~${etaMinutes} min`
     : `~${Math.floor(etaMinutes! / 60)}h ${etaMinutes! % 60}min`
 
-  const weightExtra = weightKg > weightThreshold ? weightSurcharge : 0
-  const cost = Math.max(minFee, baseFee + distanceKm! * ratePerKm + weightExtra)
+  const physicsParams = await loadPhysicsParams(c.env)
+  const breakdown = computePhysicsCost(distanceKm, weightKg, physicsParams)
 
   return c.json({
-    distanceKm: distanceKm!,
-    cost: Math.round(cost * 100) / 100,
+    distanceKm: distanceKm,
+    cost: breakdown.charge,
     currency: 'GHS',
-    etaMinutes: etaMinutes!,
+    etaMinutes: etaMinutes,
     etaText,
     usingRoadDistance,
-    weightSurcharge: weightExtra,
-    breakdown: { baseFee, ratePerKm, distanceKm: distanceKm!, weightKg, weightSurcharge: weightExtra },
+    breakdown: {
+      fuelCost: breakdown.fuelCost,
+      wearCost: breakdown.wearCost,
+      fixedCost: breakdown.fixedCost,
+      rawCost: breakdown.rawCost,
+      marginAmount: breakdown.marginAmount,
+      distanceKm,
+      weightKg,
+    },
   })
 })
 

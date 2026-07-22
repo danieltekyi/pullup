@@ -5,13 +5,14 @@ import { requireAuth, requireRole } from '../middleware/access'
 import { getBranchFilter } from '../middleware/branchScope'
 import { getPermissionsForRole, listUsers, setPermissionsForRole, updateUser } from '../repos/admin'
 import { listBranches, findBranch, upsertBranch, deleteZone, listZoneRates, listZones, upsertZone, upsertZoneRate, listParams, upsertParam, subscribePush, unsubscribePush } from '../repos/misc'
-import { computePhysicsCost, PHYSICS_DEFAULTS, type PhysicsParams } from '@pullup/shared'
+import { computePhysicsCost, type PhysicsParams } from '@pullup/shared'
 import { forbidden, notFound } from '../lib/errors'
 import { listOrders } from '../repos/orders'
 import { listRiders } from '../repos/riders'
 import { financeSummary } from '../repos/finance'
 import { fetchAllActivePartners } from '../services/partnerFetch'
 import { vapidPublicKey } from '../services/notifications/push'
+import { loadPhysicsParams } from '../lib/physicsPricing'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -116,24 +117,7 @@ app.put('/params', requireAuth(), requireRole('super-admin', 'manager'), async c
 // -------- physics pricing --------
 app.post('/physics-pricing/calculate', requireAuth(), async c => {
   const body = z.object({ weight: z.number().nonnegative(), distance: z.number().nonnegative() }).parse(await c.req.json())
-  const raw = await listParams(c.env, 'physics')
-  const map: Record<string, number> = {}
-  for (const p of raw) {
-    const n = parseFloat(p.value)
-    if (!isNaN(n)) map[p.key] = n
-  }
-  const p: PhysicsParams = {
-    fuel_price: map.fuel_price ?? PHYSICS_DEFAULTS.fuel_price,
-    base_efficiency: map.base_efficiency ?? PHYSICS_DEFAULTS.base_efficiency,
-    max_payload: map.max_payload ?? PHYSICS_DEFAULTS.max_payload,
-    alpha: map.alpha ?? PHYSICS_DEFAULTS.alpha,
-    maintenance_rate_per_km: map.maintenance_rate_per_km ?? PHYSICS_DEFAULTS.maintenance_rate_per_km,
-    beta: map.beta ?? PHYSICS_DEFAULTS.beta,
-    terrain_factor: map.terrain_factor ?? PHYSICS_DEFAULTS.terrain_factor,
-    salary_per_delivery: map.salary_per_delivery ?? PHYSICS_DEFAULTS.salary_per_delivery,
-    overhead_per_delivery: map.overhead_per_delivery ?? PHYSICS_DEFAULTS.overhead_per_delivery,
-    profit_margin: map.profit_margin ?? PHYSICS_DEFAULTS.profit_margin,
-  }
+  const p: PhysicsParams = await loadPhysicsParams(c.env)
   const breakdown = computePhysicsCost(body.distance, body.weight, p)
   return c.json({ charge: breakdown.charge, breakdown, paramsUsed: p })
 })
