@@ -1,4 +1,4 @@
-export type Role = 'super-admin' | 'manager' | 'rider'
+export type Role = 'super-admin' | 'manager' | 'rider' | 'partner'
 
 export type OrderStatus =
   | 'pending'

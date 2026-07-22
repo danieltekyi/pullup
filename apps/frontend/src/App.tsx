@@ -27,13 +27,15 @@ import AuditPage from './pages/AuditPage'
 import TrackPage from './pages/TrackPage'
 import RiderHome from './pages/rider/RiderHome'
 import RiderLogin from './pages/rider/RiderLogin'
+import PartnerLogin from './pages/partner/PartnerLogin'
+import PartnerHome from './pages/partner/PartnerHome'
 import CustomerLanding from './pages/customer/CustomerLanding'
 import CustomerLookup from './pages/customer/CustomerLookup'
 import CustomerOrderForm from './pages/customer/CustomerOrderForm'
 import CustomerOrderConfirmation from './pages/customer/CustomerOrderConfirmation'
 import LocatePage from './pages/customer/LocatePage'
 
-type AppMode = 'admin' | 'rider' | 'customer'
+type AppMode = 'admin' | 'rider' | 'customer' | 'partner'
 const APP_MODE: AppMode = (import.meta.env.VITE_APP_MODE as AppMode) ?? 'admin'
 
 function AdminApp() {
@@ -117,6 +119,28 @@ function CustomerApp() {
   )
 }
 
+function PartnerApp() {
+  const { user, loading, refresh } = useAuth()
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>
+  if (!user) {
+    return (
+      <>
+        <ToastViewport />
+        <PartnerLogin onSuccess={async () => { await refresh() }} />
+      </>
+    )
+  }
+  return (
+    <>
+      <ToastViewport />
+      <Routes>
+        <Route path="/" element={<PartnerHome />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
+  )
+}
+
 export default function App() {
   const shell =
     APP_MODE === 'customer' ? (
@@ -125,6 +149,12 @@ export default function App() {
       <AuthProvider>
         <PermissionsProvider>
           <BrowserRouter><RiderApp /></BrowserRouter>
+        </PermissionsProvider>
+      </AuthProvider>
+    ) : APP_MODE === 'partner' ? (
+      <AuthProvider>
+        <PermissionsProvider>
+          <BrowserRouter><PartnerApp /></BrowserRouter>
         </PermissionsProvider>
       </AuthProvider>
     ) : (

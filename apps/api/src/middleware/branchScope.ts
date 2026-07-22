@@ -15,6 +15,12 @@ export function getBranchFilter(c: Context<{ Bindings: Env; Variables: AppVariab
   return user.branchId || '__none__'
 }
 
+export function getPartnerFilter(c: Context<{ Bindings: Env; Variables: AppVariables }>): string | undefined {
+  const user = c.get('user')
+  if (user?.role === 'partner') return user.partnerId || '__none__'
+  return undefined
+}
+
 export function getRiderFilter(c: Context<{ Bindings: Env; Variables: AppVariables }>): string | undefined {
   const user = c.get('user')
   if (user?.role === 'rider') return user.riderId || '__none__'

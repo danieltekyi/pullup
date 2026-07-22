@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-type AppMode = 'admin' | 'rider' | 'customer'
+type AppMode = 'admin' | 'rider' | 'customer' | 'partner'
 
 const MANIFESTS: Record<AppMode, { name: string; short_name: string; description: string; theme: string; bg: string }> = {
   admin: {
@@ -25,6 +25,13 @@ const MANIFESTS: Record<AppMode, { name: string; short_name: string; description
     description: 'Track your PullUp delivery',
     theme: '#4f46e5',
     bg: '#ffffff',
+  },
+  partner: {
+    name: 'PullUp Partner',
+    short_name: 'Partner',
+    description: 'PullUp partner delivery portal',
+    theme: '#7c3aed',
+    bg: '#1e1b4b',
   },
 }
 

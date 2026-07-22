@@ -11,6 +11,7 @@ export interface AuthUser {
   branchId?: string
   managerId?: string
   riderId?: string
+  partnerId?: string
 }
 
 interface AuthContextValue {
@@ -22,11 +23,15 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({} as AuthContextValue)
 
-// The rider app only uses localStorage tokens — never Cloudflare Access cookies.
 const IS_RIDER_APP = (import.meta.env.VITE_APP_MODE ?? 'admin') === 'rider'
+const IS_PARTNER_APP = (import.meta.env.VITE_APP_MODE ?? 'admin') === 'partner'
 
 function getRiderToken(): string | null {
   try { return localStorage.getItem('rider_session') } catch { return null }
+}
+
+function getPartnerToken(): string | null {
+  try { return localStorage.getItem('partner_session') } catch { return null }
 }
 
 /** Decode a JWT payload without verifying (signature is verified server-side). */
@@ -38,6 +43,28 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 }
 
 async function loadUser(): Promise<AuthUser | null> {
+  // Partner app: check localStorage partner_session
+  const partnerToken = getPartnerToken()
+  if (partnerToken) {
+    const payload = decodeJwtPayload(partnerToken)
+    if (payload && typeof payload.sub === 'string') {
+      if (payload.exp && typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('partner_session')
+      } else {
+        return {
+          sub: payload.sub,
+          id: payload.sub,
+          email: (payload.email as string) ?? '',
+          name: (payload.name as string) ?? 'Partner',
+          role: 'partner' as Role,
+          partnerId: payload.partnerId as string | undefined,
+        }
+      }
+    } else {
+      localStorage.removeItem('partner_session')
+    }
+  }
+
   const riderToken = getRiderToken()
   if (riderToken) {
     const payload = decodeJwtPayload(riderToken)
@@ -60,9 +87,8 @@ async function loadUser(): Promise<AuthUser | null> {
     }
   }
 
-  // Rider app: never fall back to Cloudflare Access cookie auth.
-  // If no rider_session, show the login form.
-  if (IS_RIDER_APP) return null
+  // Rider app or Partner app: never fall back to Cloudflare Access cookie auth.
+  if (IS_RIDER_APP || IS_PARTNER_APP) return null
 
   // Admin / Manager: use Cloudflare Access cookie.
   try {
@@ -83,11 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     try { localStorage.removeItem('rider_session') } catch {}
-    // Clear user state immediately → shows login form without any redirect
+    try { localStorage.removeItem('partner_session') } catch {}
     setUser(null)
-    // Admin only: sign out of Cloudflare Access
-    // In rider mode (IS_RIDER_APP=true), setting user=null is enough — login form re-appears
-    if (!IS_RIDER_APP) {
+    if (!IS_RIDER_APP && !IS_PARTNER_APP) {
       logoutApi()
     }
   }

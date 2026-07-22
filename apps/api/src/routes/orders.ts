@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Env, AppVariables } from '../env'
 import { requireAuth } from '../middleware/access'
-import { getBranchFilter, getRiderFilter } from '../middleware/branchScope'
+import { getBranchFilter, getRiderFilter, getPartnerFilter } from '../middleware/branchScope'
 import { badRequest, forbidden, gone, notFound, unprocessable } from '../lib/errors'
 import type { AuditActor, Order, OrderStatus } from '@pullup/shared'
 import { computePhysicsCost } from '@pullup/shared'
@@ -45,6 +45,7 @@ app.get('/', requireAuth(), async c => {
   const q = listQ.parse(c.req.query())
   const branchId = getBranchFilter(c)
   const riderId = getRiderFilter(c)
+  const partnerIdFilter = getPartnerFilter(c)
   const statuses = q.status ? (q.status.split(',') as OrderStatus[]) : undefined
   const result = await listOrders(c.env, {
     branchId: branchId === '__ALL__' ? undefined : branchId,
@@ -53,7 +54,8 @@ app.get('/', requireAuth(), async c => {
     from: q.from,
     to: q.to,
     q: q.q,
-    partnerId: q.partnerId,
+    // Partner filter takes precedence over query param
+    partnerId: partnerIdFilter ?? q.partnerId,
     customerId: q.customerId,
     limit: q.limit,
     cursor: q.cursor,

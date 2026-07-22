@@ -11,6 +11,7 @@ import trackerRouter from './routes/tracker'
 import ridersRouter from './routes/riders'
 import riderAuthRouter from './routes/riderAuth'
 import riderLocationRouter from './routes/riderLocation'
+import partnerAuthRouter from './routes/partnerAuth'
 import publicOrdersRouter from './routes/publicOrders'
 import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
@@ -68,6 +69,7 @@ app.get('/api/auth/debug', c => {
 // Public endpoints — no Access needed
 app.route('/api/rider-auth', riderAuthRouter)
 app.route('/api/rider-location', riderLocationRouter)
+app.route('/api/partner-auth', partnerAuthRouter)
 app.route('/api/public', publicOrdersRouter)
 
 app.route('/api/orders', ordersRouter)
