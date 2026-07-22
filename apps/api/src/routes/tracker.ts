@@ -71,7 +71,14 @@ app.post('/validate', async c => {
   }).parse(await c.req.json())
 
   if (body.orderId && !body.token) {
-    const order = await findOrder(c.env, body.orderId)
+    // Try exact match first, then prefix match (in case the ID was truncated in a URL)
+    let order = await findOrder(c.env, body.orderId)
+    if (!order) {
+      const row = await c.env.DB.prepare(
+        `SELECT id FROM orders WHERE id LIKE ? AND deleted_at IS NULL LIMIT 1`
+      ).bind(`${body.orderId}%`).first<{ id: string }>()
+      if (row) order = await findOrder(c.env, row.id)
+    }
     if (!order) throw notFound()
     if (['confirmed', 'delivered', 'rejected'].includes(order.status)) {
       throw gone('tracking link expired — delivery complete')
