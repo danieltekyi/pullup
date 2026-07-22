@@ -27,6 +27,8 @@ import RiderHome from './pages/rider/RiderHome'
 import RiderLogin from './pages/rider/RiderLogin'
 import CustomerLanding from './pages/customer/CustomerLanding'
 import CustomerLookup from './pages/customer/CustomerLookup'
+import CustomerOrderForm from './pages/customer/CustomerOrderForm'
+import CustomerOrderConfirmation from './pages/customer/CustomerOrderConfirmation'
 
 type AppMode = 'admin' | 'rider' | 'customer'
 const APP_MODE: AppMode = (import.meta.env.VITE_APP_MODE as AppMode) ?? 'admin'
@@ -100,6 +102,8 @@ function CustomerApp() {
       <ToastViewport />
       <Routes>
         <Route path="/" element={<CustomerLanding />} />
+        <Route path="/order" element={<CustomerOrderForm />} />
+        <Route path="/order-confirmation" element={<CustomerOrderConfirmation />} />
         <Route path="/track" element={<TrackPage />} />
         <Route path="/lookup" element={<CustomerLookup />} />
         <Route path="*" element={<Navigate to="/" replace />} />

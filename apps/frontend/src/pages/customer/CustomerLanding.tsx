@@ -11,9 +11,7 @@ export default function CustomerLanding() {
     e.preventDefault()
     const trimmed = orderId.trim()
     if (!trimmed) return
-    // Lookup by order ID goes to a search flow — if a signed tracker token
-    // was emailed, the direct /track?token=... link opens that.
-    nav(`/lookup?orderId=${encodeURIComponent(trimmed)}`)
+    nav(`/track?orderId=${encodeURIComponent(trimmed)}`)
   }
 
   return (
@@ -65,6 +63,16 @@ export default function CustomerLanding() {
             <p className="mt-3 text-xs text-slate-500">
               Received a tracking email? Just tap the link — no ID needed.
             </p>
+            <div className="mt-6 flex items-center gap-3">
+              <div className="flex-1 border-t border-slate-200" />
+              <span className="text-sm text-slate-400">or</span>
+              <div className="flex-1 border-t border-slate-200" />
+            </div>
+            <div className="mt-4">
+              <Button variant="secondary" size="lg" fullWidth onClick={() => nav('/order')}>
+                Place a Delivery Order
+              </Button>
+            </div>
           </div>
 
           <div className="relative">

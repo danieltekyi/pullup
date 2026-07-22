@@ -6,24 +6,25 @@ import { api, apiErrorMessage } from '../services/api'
 export default function TrackPage() {
   const [params] = useSearchParams()
   const token = params.get('token')
+  const orderId = params.get('orderId')
   const [state, setState] = useState<'loading' | 'valid' | 'expired' | 'error'>('loading')
   const [data, setData] = useState<{ orderId: string; bikeId?: string; orderStatus?: string } | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!token) {
+    if (!token && !orderId) {
       setState('error')
-      setError('No tracking token provided.')
+      setError('No tracking details provided.')
       return
     }
-    api.post('/api/tracker/validate', { token })
+    api.post('/api/tracker/validate', token ? { token } : { orderId })
       .then(res => { setData(res.data); setState('valid') })
       .catch(err => {
         const code = err.response?.status
         if (code === 410) setState('expired')
         else { setState('error'); setError(apiErrorMessage(err)) }
       })
-  }, [token])
+  }, [orderId, token])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-brand-50">

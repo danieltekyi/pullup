@@ -63,9 +63,24 @@ app.post('/send', requireAuth(), async c => {
 
 // Public — hit by customer /track page. Access must be bypassed for this path.
 app.post('/validate', async c => {
-  const { token } = z.object({ token: z.string().min(10) }).parse(await c.req.json())
+  const body = z.object({
+    token: z.string().min(10).optional(),
+    orderId: z.string().min(1).optional(),
+  }).refine(data => data.token || data.orderId, {
+    message: 'token or orderId required',
+  }).parse(await c.req.json())
+
+  if (body.orderId && !body.token) {
+    const order = await findOrder(c.env, body.orderId)
+    if (!order) throw notFound()
+    if (['confirmed', 'delivered', 'rejected'].includes(order.status)) {
+      throw gone('tracking link expired — delivery complete')
+    }
+    return c.json({ ok: true, orderId: order.id, orderStatus: order.status, bikeId: order.bikeId })
+  }
+
   try {
-    const payload = await verifyTrackerToken(c.env, token)
+    const payload = await verifyTrackerToken(c.env, body.token!)
     const order = await findOrder(c.env, payload.orderId)
     if (!order) throw notFound()
     if (['confirmed', 'delivered', 'rejected'].includes(order.status)) {
