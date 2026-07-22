@@ -1,17 +1,41 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, Truck, Bike, ShieldCheck, MapPin, Clock, ArrowRight } from 'lucide-react'
+import { Package, Truck, Bike, ShieldCheck, MapPin, Clock, ArrowRight, Locate, Copy, CheckCircle2 } from 'lucide-react'
 import { Button, Input } from '../../components/ui'
+
+interface MyLoc { lat: number; lng: number; accuracy: number }
 
 export default function CustomerLanding() {
   const nav = useNavigate()
   const [orderId, setOrderId] = useState('')
+  const [myLoc, setMyLoc] = useState<MyLoc | null>(null)
+  const [gpsLoading, setGpsLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   function lookup(e: FormEvent) {
     e.preventDefault()
     const trimmed = orderId.trim()
     if (!trimmed) return
     nav(`/track?orderId=${encodeURIComponent(trimmed)}`)
+  }
+
+  function getLocation() {
+    if (!navigator.geolocation) { alert('GPS not available on this device'); return }
+    setGpsLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setMyLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy })
+        setGpsLoading(false)
+      },
+      () => { setGpsLoading(false); alert('Could not get location. Please allow location access in your browser.') },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  function copyLink() {
+    if (!myLoc) return
+    const link = `https://maps.google.com/?q=${myLoc.lat.toFixed(6)},${myLoc.lng.toFixed(6)}`
+    navigator.clipboard.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000) })
   }
 
   return (
@@ -72,6 +96,61 @@ export default function CustomerLanding() {
               <Button variant="secondary" size="lg" fullWidth onClick={() => nav('/order')}>
                 Place a Delivery Order
               </Button>
+            </div>
+
+            {/* GPS Location section */}
+            <div className="mt-6 border border-slate-200 rounded-2xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <Locate size={16} className="text-brand-600" />
+                Share your exact location
+              </p>
+              {!myLoc ? (
+                <button
+                  onClick={getLocation}
+                  disabled={gpsLoading}
+                  className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+                >
+                  {gpsLoading
+                    ? <><span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Getting location…</>
+                    : <><Locate size={16} /> Get my GPS location</>
+                  }
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle2 size={15} className="text-emerald-600" />
+                      <p className="text-sm font-semibold text-emerald-700">Location captured!</p>
+                    </div>
+                    <p className="text-xs font-mono text-slate-600">
+                      {myLoc.lat.toFixed(6)}, {myLoc.lng.toFixed(6)}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">Accuracy: ±{Math.round(myLoc.accuracy)} metres</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyLink}
+                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+                    >
+                      {copied ? <><CheckCircle2 size={14} /> Copied!</> : <><Copy size={14} /> Copy location link</>}
+                    </button>
+                    <a
+                      href={`https://maps.google.com/?q=${myLoc.lat.toFixed(6)},${myLoc.lng.toFixed(6)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold py-2.5 px-4 rounded-xl transition-colors"
+                    >
+                      <MapPin size={14} /> Open map
+                    </a>
+                  </div>
+                  <button onClick={getLocation} className="w-full text-xs text-slate-400 hover:text-slate-600 text-center py-1">
+                    Refresh location
+                  </button>
+                </div>
+              )}
+              <p className="text-xs text-slate-400 mt-2 text-center">
+                Send the copied link to your rider via WhatsApp or SMS
+              </p>
             </div>
           </div>
 
