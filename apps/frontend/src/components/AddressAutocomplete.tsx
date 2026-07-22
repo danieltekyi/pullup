@@ -34,21 +34,6 @@ interface Props {
   id?: string
 }
 
-declare global {
-  interface Window {
-    google?: {
-      maps?: {
-        places?: {
-          Autocomplete: new (
-            input: HTMLInputElement,
-            options?: { types?: string[]; componentRestrictions?: { country: string }; fields?: string[] },
-          ) => GoogleAutocompleteInstance
-        }
-      }
-    }
-    __mapsLoaded?: boolean
-  }
-}
 
 export function AddressAutocomplete({
   value,

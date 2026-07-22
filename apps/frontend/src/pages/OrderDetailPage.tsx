@@ -99,7 +99,7 @@ export default function OrderDetailPage() {
   }
 
   async function deleteOrder() {
-    if (!confirm(`Delete order ${id}? This cannot be undone.`)) return
+    if (!window.confirm(`Delete order ${id}? This cannot be undone.`)) return
     try {
       await api.delete(`/api/orders/${id}`)
       toast.success('Order deleted')

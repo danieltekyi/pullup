@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, Button, toast } from '../components/ui'
 import { subscribeToPush, unsubscribeFromPush } from '../services/push'
-import { Bell, BellOff, Download, FileSpreadsheet, Upload } from 'lucide-react'
+import { Upload, Bell, BellOff, FileSpreadsheet } from 'lucide-react'
 import { api, apiErrorMessage } from '../services/api'
 
 export default function SettingsPage() {

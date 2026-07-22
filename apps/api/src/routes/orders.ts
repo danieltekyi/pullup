@@ -140,7 +140,7 @@ app.put('/:id/cost', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
   const updated = await updateOrder(c.env, order.id, { cost: body.cost })
-  await logOrderEvent(c.env, { orderId: order.id, type: 'updated', actor: actorFromCtx(c), before: order, after: updated, note: `Cost set to ${body.cost}` })
+  await logOrderEvent(c.env, { orderId: order.id, type: 'priced', actor: actorFromCtx(c), before: order, after: updated, note: `Cost set to ${body.cost}` })
   return c.json(updated)
 })
 
