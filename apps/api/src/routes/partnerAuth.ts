@@ -4,11 +4,18 @@ import { SignJWT, jwtVerify } from 'jose'
 import type { AppVariables, Env } from '../env'
 import { badRequest } from '../lib/errors'
 import { sendEmail } from '../services/notifications/email'
+import { rateLimit, attemptsExceeded, registerFailedAttempt, clearAttempts } from '../middleware/rateLimit'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
+// SECURITY (DEF-002)
+app.use('/request', rateLimit({ bucket: 'partner-otp-request', limit: 5, windowSeconds: 300 }))
+app.use('/verify', rateLimit({ bucket: 'partner-otp-verify', limit: 10, windowSeconds: 300 }))
+
+// SECURITY (DEF-013): dedicated secret, with fallback for existing deployments.
 function partnerJwtKey(env: Env) {
-  return new TextEncoder().encode(env.TRACKER_LINK_SECRET + ':partner-session')
+  const secret = env.PARTNER_SESSION_SECRET || env.TRACKER_LINK_SECRET
+  return new TextEncoder().encode(secret + ':partner-session')
 }
 
 function generateCode(): string {
@@ -45,10 +52,11 @@ app.post('/request', async c => {
   })
 
   const isDev = !sent.ok
+  void isDev
+  // SECURITY (DEF-004): never return the code over the API.
   return c.json({
     ok: true,
-    message: sent.ok ? 'Code sent to your email.' : 'Code generated — email delivery unavailable.',
-    ...(isDev ? { _devCode: code } : {}),
+    message: 'If your account exists, a code has been sent.',
   })
 })
 
@@ -63,10 +71,22 @@ app.post('/verify', async c => {
 
   const stored = await c.env.KV.get(`partner-code:${partner.id}`, 'json') as { code: string; expiresAt: string } | null
   if (!stored) throw badRequest('Code expired — please request a new one')
-  if (stored.code !== code) throw badRequest('Invalid code')
+
+  // SECURITY (DEF-003): lock the code after 5 wrong guesses.
+  if (await attemptsExceeded(c.env, 'partner-otp', partner.id)) {
+    await c.env.KV.delete(`partner-code:${partner.id}`)
+    throw badRequest('Too many incorrect attempts — please request a new code')
+  }
+
+  if (stored.code !== code) {
+    const { allowed } = await registerFailedAttempt(c.env, 'partner-otp', partner.id)
+    if (!allowed) await c.env.KV.delete(`partner-code:${partner.id}`)
+    throw badRequest('Invalid code')
+  }
   if (new Date(stored.expiresAt) < new Date()) throw badRequest('Code expired — please request a new one')
 
   await c.env.KV.delete(`partner-code:${partner.id}`)
+  await clearAttempts(c.env, 'partner-otp', partner.id)
 
   const jwt = await new SignJWT({
     sub: partner.id,

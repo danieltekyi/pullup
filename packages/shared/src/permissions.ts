@@ -93,14 +93,55 @@ export const DEFAULT_PERMISSIONS: Record<Role, Permissions> = {
       zones: READ_ONLY,
     },
   },
+  // DEF-005/DEF-010: `partner` existed on the Role union but had no entry here.
+  // `DEFAULT_PERMISSIONS[role]` returned undefined, which crashed the console
+  // in canSeeMenu. Partners see only their own orders — never staff resources.
+  partner: {
+    menus: {
+      dashboard: true,
+      orders: true,
+      settings: true,
+    },
+    actions: {
+      orders: { create: true, read: true, update: false, delete: false },
+      riders: NONE,
+      fleet: NONE,
+      partners: NONE,
+      finance: NONE,
+      customers: NONE,
+      users: NONE,
+      branches: NONE,
+      params: NONE,
+      zones: READ_ONLY,
+    },
+  },
+}
+
+/**
+ * Safe lookup for a role's permissions. Always returns a usable object so a
+ * missing or unrecognised role can never crash the UI (DEF-005).
+ */
+export const EMPTY_PERMISSIONS: Permissions = { menus: {}, actions: {} }
+
+export function permissionsForRole(role: string | undefined | null): Permissions {
+  if (!role) return EMPTY_PERMISSIONS
+  return DEFAULT_PERMISSIONS[role as Role] ?? EMPTY_PERMISSIONS
+}
+
+/** Type guard for data arriving from the API — never trust its shape. */
+export function isPermissions(value: unknown): value is Permissions {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Partial<Permissions>
+  return typeof v.menus === 'object' && v.menus !== null &&
+    typeof v.actions === 'object' && v.actions !== null
 }
 
 export function can(perms: Permissions | null, resource: ResourceKey, action: Action): boolean {
-  if (!perms) return false
+  if (!perms || !perms.actions) return false
   return perms.actions[resource]?.[action] ?? false
 }
 
 export function canSeeMenu(perms: Permissions | null, menu: MenuKey): boolean {
-  if (!perms) return false
+  if (!perms || !perms.menus) return false
   return perms.menus[menu] ?? false
 }

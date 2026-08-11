@@ -1,4 +1,4 @@
-import { Bike, Copy, ExternalLink, LayoutDashboard, MapPin, ShoppingBag, type LucideIcon } from 'lucide-react'
+import { Bike, Copy, ExternalLink, LayoutDashboard, MapPin, ShoppingBag, Users, type LucideIcon } from 'lucide-react'
 import { Button, Card, Textarea, toast } from '../components/ui'
 
 interface LaunchpadLink {
@@ -37,6 +37,13 @@ const LINKS: LaunchpadLink[] = [
     icon: MapPin,
     iconBg: 'bg-sky-100',
     iconColor: 'text-sky-700',
+  },
+  {
+    name: 'Partner Intake Form',
+    url: 'https://pullup.aegisassetllc.com/partner-intake',
+    icon: Users,
+    iconBg: 'bg-violet-100',
+    iconColor: 'text-violet-700',
   },
 ]
 

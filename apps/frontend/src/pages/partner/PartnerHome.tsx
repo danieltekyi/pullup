@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Order } from '@pullup/shared'
-import { api, apiErrorMessage, logout } from '../../services/api'
+import { api, apiErrorMessage } from '../../services/api'
 import { Badge, Button, Card, StatusBadge, toast } from '../../components/ui'
-import { Building2, Download, FileSpreadsheet, LogOut, Package, RefreshCw, Upload } from 'lucide-react'
+import { Building2, FileSpreadsheet, LogOut, Package, RefreshCw, Upload } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
 export default function PartnerHome() {

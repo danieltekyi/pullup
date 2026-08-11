@@ -28,7 +28,7 @@ export const ORDER_STATUS_FLOW: Record<OrderStatus, OrderStatus[]> = {
   cancelled: [],
 }
 
-export const ROLES: Role[] = ['super-admin', 'manager', 'rider']
+export const ROLES: Role[] = ['super-admin', 'manager', 'rider', 'partner']
 
 export const COGNITO_GROUPS = {
   SUPER_ADMIN: 'super-admin',

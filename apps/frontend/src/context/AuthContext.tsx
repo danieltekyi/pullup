@@ -108,8 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   function logout() {
-    try { localStorage.removeItem('rider_session') } catch {}
-    try { localStorage.removeItem('partner_session') } catch {}
+    try { localStorage.removeItem('rider_session') } catch { /* storage unavailable */ }
+    try { localStorage.removeItem('partner_session') } catch { /* storage unavailable */ }
     setUser(null)
     if (!IS_RIDER_APP && !IS_PARTNER_APP) {
       logoutApi()

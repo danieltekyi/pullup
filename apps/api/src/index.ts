@@ -15,6 +15,7 @@ import partnerAuthRouter from './routes/partnerAuth'
 import publicOrdersRouter from './routes/publicOrders'
 import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
+import { rateLimit } from './middleware/rateLimit'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -50,21 +51,31 @@ app.use('*', accessAuth())
 
 app.get('/health', c => c.json({ ok: true, service: 'pullup-api', env: c.env.CF_ACCESS_TEAM_DOMAIN }))
 
-// Auth debug — shows what the Worker sees (token presence, user object).
-// Visit pulluprider.aegisassetllc.com/api/auth/debug to diagnose login issues.
+// SECURITY (DEF-012): the auth debug endpoint disclosed the accepted Access AUD
+// values and token presence. Restricted to signed-in super-admins.
 app.get('/api/auth/debug', c => {
   const u = c.get('user')
+  if (!u || u.role !== 'super-admin') return c.json({ error: 'not_found' }, 404)
   const cfJwt = c.req.header('Cf-Access-Jwt-Assertion')
   const cookie = c.req.header('cookie') || ''
-  const hasCookie = cookie.includes('CF_Authorization=')
-  const hasBearer = (c.req.header('Authorization') || '').startsWith('Bearer ')
   return c.json({
-    user: u ? { id: u.id, email: u.email, role: u.role, name: u.name } : null,
-    authenticated: !!u,
-    headers: { hasCfJwt: !!cfJwt, hasCookie, hasBearer },
-    acceptedAuds: c.env.CF_ACCESS_AUD.split(',').map(a => a.trim()),
+    user: { id: u.id, email: u.email, role: u.role, name: u.name },
+    authenticated: true,
+    headers: {
+      hasCfJwt: !!cfJwt,
+      hasCookie: cookie.includes('CF_Authorization='),
+      hasBearer: (c.req.header('Authorization') || '').startsWith('Bearer '),
+    },
   })
 })
+
+// SECURITY (DEF-002): throttle the public surface. Tracker validate is the
+// endpoint that previously allowed unbounded customer-record probing.
+app.use('/api/tracker/validate', rateLimit({ bucket: 'tracker-validate', limit: 20, windowSeconds: 60 }))
+app.use('/api/tracker/proxy', rateLimit({ bucket: 'tracker-proxy', limit: 60, windowSeconds: 60 }))
+// Estimate calls the paid Google Distance Matrix API — cap it hard (DEF-006).
+app.use('/api/public/orders/estimate', rateLimit({ bucket: 'public-estimate', limit: 15, windowSeconds: 60 }))
+app.use('/api/public/orders', rateLimit({ bucket: 'public-order-create', limit: 10, windowSeconds: 600 }))
 
 // Public endpoints — no Access needed
 app.route('/api/rider-auth', riderAuthRouter)

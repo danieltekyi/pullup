@@ -42,13 +42,19 @@ export function accessAuth(): MiddlewareHandler<{ Bindings: Env; Variables: AppV
         const { verifyRiderToken } = await import('../routes/riderAuth')
         const riderPayload = await verifyRiderToken(c.env, authHeader)
         if (riderPayload) {
+          // SECURITY (DEF-008): status was hard-coded 'active', so requireAuth's
+          // inactive check could never fire and a deactivated rider kept access
+          // for the full 30-day token life. Re-read the live status from D1.
+          const live = await c.env.DB.prepare(
+            `SELECT status FROM users WHERE id = ? LIMIT 1`,
+          ).bind(riderPayload.sub).first<{ status: 'active' | 'inactive' }>()
           c.set('user', {
             sub: riderPayload.sub,
             email: riderPayload.email ?? '',
             id: riderPayload.sub,
             name: riderPayload.name ?? 'Rider',
             role: riderPayload.role as AppUser['role'],
-            status: 'active',
+            status: live?.status ?? 'inactive',
             branchId: riderPayload.branchId,
             riderId: riderPayload.riderId,
           })
@@ -61,13 +67,17 @@ export function accessAuth(): MiddlewareHandler<{ Bindings: Env; Variables: AppV
         const { verifyPartnerToken } = await import('../routes/partnerAuth')
         const partnerPayload = await verifyPartnerToken(c.env, authHeader)
         if (partnerPayload) {
+          // SECURITY (DEF-008): honour deactivation for partners too.
+          const live = await c.env.DB.prepare(
+            `SELECT active FROM partners WHERE id = ? LIMIT 1`,
+          ).bind(partnerPayload.partnerId ?? partnerPayload.sub).first<{ active: number }>()
           c.set('user', {
             sub: partnerPayload.sub,
             email: partnerPayload.email ?? '',
             id: partnerPayload.sub,
             name: partnerPayload.name ?? 'Partner',
             role: 'partner' as AppUser['role'],
-            status: 'active',
+            status: live?.active ? 'active' : 'inactive',
             partnerId: partnerPayload.partnerId,
           })
           return next()
@@ -152,12 +162,16 @@ async function loadOrCreateProfile(
     }
   }
 
-  // Bootstrap: first user to hit the system becomes super-admin (matches the
-  // Access-only auth model — anyone reaching this point already passed Access
-  // for one of our apps). Subsequent unknown users become riders and need
-  // manager promotion.
+  // Bootstrap: seed the first super-admin explicitly via BOOTSTRAP_ADMIN_EMAIL.
+  // SECURITY (DEF-014): this previously granted super-admin to whoever signed in
+  // while the users table was empty, so a restore-from-empty or failed migration
+  // would hand the next visitor full control. Elevation is now opt-in.
+  const bootstrapEmail = (c.env.BOOTSTRAP_ADMIN_EMAIL ?? '').toLowerCase().trim()
   const totalRow = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM users`).first<{ c: number }>()
-  const initialRole: Role = (totalRow?.c ?? 0) === 0 ? 'super-admin' : 'rider'
+  const isFirstUser = (totalRow?.c ?? 0) === 0
+  const initialRole: Role = isFirstUser && bootstrapEmail && email === bootstrapEmail
+    ? 'super-admin'
+    : 'rider'
 
   const id = sub || `usr_${crypto.randomUUID()}`
   await c.env.DB.prepare(

@@ -6,12 +6,21 @@ import { badRequest } from '../lib/errors'
 import { findUserByPhone, findUserByEmail } from '../repos/riderAuth'
 import { sendSms } from '../services/notifications/sms'
 import { sendEmail } from '../services/notifications/email'
+import { rateLimit, attemptsExceeded, registerFailedAttempt, clearAttempts } from '../middleware/rateLimit'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
-// Secret for signing rider session JWTs (reuses TRACKER_LINK_SECRET)
+// SECURITY (DEF-002): throttle both ends of the OTP flow.
+app.use('/request', rateLimit({ bucket: 'rider-otp-request', limit: 5, windowSeconds: 300 }))
+app.use('/verify', rateLimit({ bucket: 'rider-otp-verify', limit: 10, windowSeconds: 300 }))
+
+// Secret for signing rider session JWTs.
+// SECURITY (DEF-013): prefer a dedicated secret. Falls back to the tracker
+// secret only so existing deployments keep working until RIDER_SESSION_SECRET
+// is set — rotating to the dedicated secret invalidates current sessions once.
 function riderJwtKey(env: Env) {
-  return new TextEncoder().encode(env.TRACKER_LINK_SECRET + ':rider-session')
+  const secret = env.RIDER_SESSION_SECRET || env.TRACKER_LINK_SECRET
+  return new TextEncoder().encode(secret + ':rider-session')
 }
 
 function generateCode(): string {
@@ -69,16 +78,10 @@ app.post('/request', async c => {
 
   console.info({ riderId: rider.id, codeSent: sent, via: isPhone ? 'sms' : 'email' }, 'rider auth code sent')
 
-  // In dev / when email isn't configured: return code in response so you can test without email.
-  // Remove this block (or guard with a DEV flag) before going to production.
-  const isDev = !sent
-  return c.json({
-    ok: true,
-    message: sent
-      ? 'If your account exists, a code has been sent.'
-      : 'Code generated but email delivery failed. Set RESEND_API_KEY secret.',
-    ...(isDev ? { _devCode: code } : {}),
-  })
+  // SECURITY (DEF-004): never return the code over the API. This previously
+  // leaked `_devCode` whenever delivery failed, which made a provider outage a
+  // full authentication bypass for anyone who knew a rider's phone or email.
+  return c.json({ ok: true, message: 'If your account exists, a code has been sent.' })
 })
 
 /**
@@ -101,11 +104,24 @@ app.post('/verify', async c => {
 
   const stored = await c.env.KV.get(`rider-code:${rider.id}`, 'json') as { code: string; expiresAt: string } | null
   if (!stored) throw badRequest('Code expired — please request a new one')
-  if (stored.code !== body.code) throw badRequest('Invalid code')
+
+  // SECURITY (DEF-003): a 6-digit code with unlimited guesses is a 10^6
+  // keyspace an attacker can walk in minutes. Lock the code after 5 misses.
+  if (await attemptsExceeded(c.env, 'rider-otp', rider.id)) {
+    await c.env.KV.delete(`rider-code:${rider.id}`)
+    throw badRequest('Too many incorrect attempts — please request a new code')
+  }
+
+  if (stored.code !== body.code) {
+    const { allowed } = await registerFailedAttempt(c.env, 'rider-otp', rider.id)
+    if (!allowed) await c.env.KV.delete(`rider-code:${rider.id}`)
+    throw badRequest('Invalid code')
+  }
   if (new Date(stored.expiresAt) < new Date()) throw badRequest('Code expired — please request a new one')
 
   // Delete the code so it can only be used once
   await c.env.KV.delete(`rider-code:${rider.id}`)
+  await clearAttempts(c.env, 'rider-otp', rider.id)
 
   // Sign a 30-day session JWT.
   // Always use role 'rider' regardless of the user's DB role —

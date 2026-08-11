@@ -16,8 +16,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # QUALITY GATE (DEF-009): deployment previously ran straight off a push to
+  # main with no dependency on CI, so a red build shipped to production. Every
+  # deploy job now waits on this.
+  ci:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run shared:build
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
   api:
     name: Deploy API Worker
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +58,7 @@ jobs:
   pages:
     name: Deploy ${{ matrix.mode }} to Pages
     runs-on: ubuntu-latest
-    needs: api
+    needs: [ci, api]
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +69,10 @@ jobs:
             project: pullup-rider
           - mode: customer
             project: pullup-customer
+          # DEF-015: the partner portal was live but built outside the pipeline,
+          # so production ran from an unknown commit with no rollback path.
+          - mode: partner
+            project: pullup-partner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

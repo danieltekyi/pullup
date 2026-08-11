@@ -15,7 +15,7 @@
     "frontend:build": "npm run build --workspace=@pullup/frontend",
     "frontend:test": "npm run test --workspace=@pullup/frontend",
     "shared:build": "npm run build --workspace=@pullup/shared",
-    "e2e": "npm run test --workspace=@pullup/e2e",
+    "e2e": "npm run e2e:run --workspace=@pullup/e2e",
     "lint": "eslint \"apps/**/src/**/*.{ts,tsx}\" \"packages/**/src/**/*.ts\"",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

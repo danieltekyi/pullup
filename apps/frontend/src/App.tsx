@@ -29,6 +29,8 @@ import RiderHome from './pages/rider/RiderHome'
 import RiderLogin from './pages/rider/RiderLogin'
 import PartnerLogin from './pages/partner/PartnerLogin'
 import PartnerHome from './pages/partner/PartnerHome'
+import PartnerIntakeForm from './pages/partner/PartnerIntakeForm'
+import PartnerDataCollection from './pages/partner/PartnerDataCollection'
 import CustomerLanding from './pages/customer/CustomerLanding'
 import CustomerLookup from './pages/customer/CustomerLookup'
 import CustomerOrderForm from './pages/customer/CustomerOrderForm'
@@ -47,6 +49,8 @@ function AdminApp() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/track" element={<TrackPage />} />
+        <Route path="/partner-intake" element={<PartnerIntakeForm />} />
+        <Route path="/partner-data/:token" element={<PartnerDataCollection />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<LayoutWithSidebar />}>
             <Route path="/" element={<DashboardPage />} />

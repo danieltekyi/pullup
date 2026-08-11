@@ -13,12 +13,17 @@ export interface Env {
   CF_ACCESS_AUD: string
   CF_ACCOUNT_ID: string
   CF_ACCESS_RIDERS_GROUP_ID: string
+  /** Only this address may be auto-elevated to super-admin on first sign-in (DEF-014). */
+  BOOTSTRAP_ADMIN_EMAIL?: string
 
   // Secrets (set via `wrangler secret put`)
   CF_API_TOKEN?: string   // for managing Access groups from the Worker
 
   // Secrets (set via `wrangler secret put`)
   TRACKER_LINK_SECRET: string
+  /** Dedicated signing secrets — DEF-013. Falls back to TRACKER_LINK_SECRET when unset. */
+  RIDER_SESSION_SECRET?: string
+  PARTNER_SESSION_SECRET?: string
   SMTP_HOST?: string
   SMTP_PORT?: string
   SMTP_USER?: string
@@ -54,6 +59,8 @@ export interface AppUser extends AccessUser {
   branchId?: string
   managerId?: string
   riderId?: string
+  /** Set for partner sessions — DEF-010 (was read by branchScope but never declared). */
+  partnerId?: string
 }
 
 export type AppVariables = {

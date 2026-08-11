@@ -71,14 +71,17 @@ app.post('/validate', async c => {
   }).parse(await c.req.json())
 
   if (body.orderId && !body.token) {
-    // Try exact match first, then prefix match (in case the ID was truncated in a URL)
-    let order = await findOrder(c.env, body.orderId)
-    if (!order) {
-      const row = await c.env.DB.prepare(
-        `SELECT id FROM orders WHERE id LIKE ? AND deleted_at IS NULL LIMIT 1`
-      ).bind(`${body.orderId}%`).first<{ id: string }>()
-      if (row) order = await findOrder(c.env, row.id)
-    }
+    // SECURITY (DEF-001): exact match only. This previously fell back to a SQL
+    // LIKE prefix lookup, which turned the endpoint into an oracle — a
+    // one-character "id" returned a real customer's name and delivery address,
+    // making the whole orders table enumerable by anyone.
+    //
+    // IDs are `ord_<base36 time>_<12 hex>` (48 bits of entropy), so knowing the
+    // full ID is itself the capability. The length floor just stops absurdly
+    // short values being probed; legacy/hand-made IDs still resolve.
+    // Never reintroduce a partial match here.
+    if (body.orderId.length < 8) throw notFound()
+    const order = await findOrder(c.env, body.orderId)
     if (!order) throw notFound()
     if (['confirmed', 'delivered', 'rejected'].includes(order.status)) {
       throw gone('tracking link expired — delivery complete')

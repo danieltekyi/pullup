@@ -12,8 +12,10 @@
     "build:admin": "cross-env VITE_APP_MODE=admin vite build",
     "build:rider": "cross-env VITE_APP_MODE=rider vite build",
     "build:customer": "cross-env VITE_APP_MODE=customer vite build",
-    "build:all": "npm run build:admin && npm run build:rider && npm run build:customer",
+    "build:all": "npm run build:admin && npm run build:rider && npm run build:customer && npm run build:partner",
+    "build:partner": "cross-env VITE_APP_MODE=partner vite build",
     "preview": "vite preview",
+    "preview:customer": "cross-env VITE_APP_MODE=customer vite preview --port 4173 --outDir dist-customer",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
