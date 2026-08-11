@@ -22,14 +22,16 @@ const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 app.use('*', honoLogger())
 app.use('*', secureHeaders())
 app.use('*', async (c, next) => {
-  const origins = c.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+  const origins = c.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
   const corsMw = cors({
     origin: (origin, _c) => {
-      // Allow requests from our three Pages subdomains AND
-      // from aegis-dashboard.cloudflareaccess.com (for Access redirects)
+      // Non-browser callers (curl, server-to-server) send no Origin header.
       if (!origin) return '*'
       if (origins.includes(origin) || origin.endsWith('.cloudflareaccess.com')) return origin
-      return origins[0] // fallback to first allowed origin
+      // Explicit deny. Previously this returned origins[0], which the browser
+      // rejects anyway but makes the logs read like a misconfiguration rather
+      // than a refusal.
+      return null
     },
     credentials: true,
     allowHeaders: ['Content-Type', 'Authorization', 'Cf-Access-Jwt-Assertion', 'Cookie'],

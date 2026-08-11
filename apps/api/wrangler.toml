@@ -90,7 +90,10 @@ crons = ["*/5 * * * *"]
 FRONTEND_ADMIN_URL    = "https://pullup.aegisassetllc.com"
 FRONTEND_RIDER_URL    = "https://pulluprider.aegisassetllc.com"
 FRONTEND_CUSTOMER_URL = "https://pullupcustomer.aegisassetllc.com"
-ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com"
+# Origins permitted to call the API from a browser. The marketing site and its
+# client portal (pullup-web) live on their own origin and authenticate with a
+# partner Bearer token, so they must be listed here explicitly.
+ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com,https://pullup-web.pages.dev,https://pullup.gh,https://www.pullup.gh"
 CF_ACCESS_TEAM_DOMAIN = "aegis-dashboard.cloudflareaccess.com"
 # Three AUDs (comma-separated), one per Access application — token can carry any.
 CF_ACCESS_AUD         = "224159b5912326257bc0ee012f7727193e3708631f3e70632fc406c646b90111,b58f3ac228de8f6b297ff74c51a442d6402c8163ef9afebc45f08abf77fa1a81,edaa3f63b88305167a606332d1d01a99266748b6d544e02db344d04e5cbadd40"
