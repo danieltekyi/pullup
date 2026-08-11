@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Bike, CheckCircle2, Clock, Copy, Locate, MapPin, Package, XCircle, RefreshCw } from 'lucide-react'
 import { api, apiErrorMessage } from '../services/api'
@@ -187,7 +187,7 @@ export default function TrackPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-50">
-      {/* Map â€” only when rider is active */}
+      {/* Map — only when rider is active */}
       {phase === 'valid' && data && ACTIVE.includes(data.orderStatus) && (
         <div ref={mapDiv} className="w-full h-64 md:h-80 bg-slate-200" />
       )}
@@ -198,7 +198,7 @@ export default function TrackPage() {
           {phase === 'loading' && (
             <div className="py-10 flex flex-col items-center gap-3">
               <RefreshCw size={24} className="animate-spin text-brand-600" />
-              <p className="text-slate-500 text-sm">Loading tracking infoâ€¦</p>
+              <p className="text-slate-500 text-sm">Loading tracking info…</p>
             </div>
           )}
 
@@ -233,10 +233,10 @@ export default function TrackPage() {
 
               <div className="bg-slate-50 rounded-xl p-4 text-left space-y-3 mb-4">
                 <InfoRow icon={Package} label="Order" value={data.orderId.slice(-12)} />
-                <InfoRow icon={MapPin} label="Delivering to" value={data.destination ?? 'â€”'} />
+                <InfoRow icon={MapPin} label="Delivering to" value={data.destination ?? '—'} />
                 <InfoRow icon={Bike} label="Status" value={statusLabel(data.orderStatus)} highlight />
 
-                {/* ETA â€” only when picked up / in transit */}
+                {/* ETA — only when picked up / in transit */}
                 {ACTIVE.includes(data.orderStatus) && data.etaText && (
                   <InfoRow icon={Clock} label="Estimated arrival" value={data.etaText} highlight />
                 )}
@@ -263,7 +263,7 @@ export default function TrackPage() {
                     ) : (
                       <Locate size={15} />
                     )}
-                    {gpsLoading ? 'Getting locationâ€¦' : 'Get my GPS location'}
+                    {gpsLoading ? 'Getting location…' : 'Get my GPS location'}
                   </button>
                 ) : (
                   <div className="space-y-2">
@@ -302,7 +302,7 @@ export default function TrackPage() {
                     </a>
                   </div>
                 )}
-                <p className="text-xs text-slate-400 mt-2">Your location is only visible to you â€” share it with the rider if needed.</p>
+                <p className="text-xs text-slate-400 mt-2">Your location is only visible to you — share it with the rider if needed.</p>
               </div>
 
               {ACTIVE.includes(data.orderStatus) && (

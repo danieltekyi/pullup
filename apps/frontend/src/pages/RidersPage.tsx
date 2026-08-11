@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Rider } from '@pullup/shared'
 import { api, apiErrorMessage } from '../services/api'
 import { Button, Card, Field, Input, Modal, Select, toast } from '../components/ui'
