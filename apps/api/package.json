@@ -1,8 +1,8 @@
-{
+﻿{
   "name": "@pullup/api",
   "version": "2.0.0",
   "private": true,
-  "description": "PullUp API — Hono on Cloudflare Workers, D1, R2, Access-gated",
+  "description": "PullUp API â€” Hono on Cloudflare Workers, D1, R2, Access-gated",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -22,6 +22,7 @@
     "@cloudflare/workers-types": "^4.20240725.0",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5",
-    "wrangler": "^3.65.1"
+    "wrangler": "^4.36.0"
   }
 }
+

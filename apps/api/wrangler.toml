@@ -56,27 +56,42 @@ id = "dc4829795aff4c8fb8bdc7413b78e1c1"
 [[ratelimits]]
 name = "RL_PUBLIC"          # tracker validate / proxy — anti-enumeration
 namespace_id = "1001"
-simple = { limit = 20, period = 60 }
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
 
 [[ratelimits]]
 name = "RL_ESTIMATE"        # calls the paid Google Distance Matrix API
 namespace_id = "1002"
-simple = { limit = 15, period = 60 }
+
+  [ratelimits.simple]
+  limit = 15
+  period = 60
 
 [[ratelimits]]
 name = "RL_ORDER_CREATE"    # unauthenticated public order creation
 namespace_id = "1003"
-simple = { limit = 10, period = 60 }
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
 
 [[ratelimits]]
 name = "RL_AUTH_REQUEST"    # OTP send — limits SMS/email spend and spam
 namespace_id = "1004"
-simple = { limit = 5, period = 60 }
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60
 
 [[ratelimits]]
 name = "RL_AUTH_VERIFY"     # OTP verify — the brute-force surface
 namespace_id = "1005"
-simple = { limit = 10, period = 60 }
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
 
 # Poll active partner endpoints every 5 minutes (see scheduledPartnerFetch)
 [triggers]
