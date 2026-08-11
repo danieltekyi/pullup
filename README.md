@@ -73,9 +73,11 @@ The `apps/frontend` codebase compiles into three separate builds:
 
 | Site | Domain | Mode |
 | --- | --- | --- |
-| Admin console | `pullup.aegisassetllc.com` | `VITE_APP_MODE=admin` |
+| Public marketing site | `pullup.aegisassetllc.com` | separate `pullup-web` project |
+| Admin console | `pullupadmin.aegisassetllc.com` | `VITE_APP_MODE=admin` |
 | Rider PWA | `pulluprider.aegisassetllc.com` | `VITE_APP_MODE=rider` |
 | Public customer | `pullupcustomer.aegisassetllc.com` | `VITE_APP_MODE=customer` |
+| Partner portal | `pulluppartner.aegisassetllc.com` | `VITE_APP_MODE=partner` |
 
 Each build only ships the code that audience needs.
 

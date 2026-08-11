@@ -13,8 +13,10 @@ compatibility_flags = ["nodejs_compat"]
 pattern = "api.aegisassetllc.com"
 custom_domain = true
 
+# Admin console. Moved off the bare brand subdomain (which now serves the public
+# marketing site) so the customer-facing name is not an internal tool.
 [[routes]]
-pattern = "pullup.aegisassetllc.com/api/*"
+pattern = "pullupadmin.aegisassetllc.com/api/*"
 zone_name = "aegisassetllc.com"
 
 [[routes]]
@@ -116,7 +118,10 @@ FRONTEND_CUSTOMER_URL = "https://pullupcustomer.aegisassetllc.com"
 # Origins permitted to call the API from a browser. The marketing site and its
 # client portal (pullup-web) live on their own origin and authenticate with a
 # partner Bearer token, so they must be listed here explicitly.
-ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com,https://pullupportal.aegisassetllc.com,https://pullup-web.pages.dev,https://pullup.gh,https://www.pullup.gh"
+# Origins permitted to call the API from a browser. pullup.aegisassetllc.com is
+# the public marketing site and deliberately absent — it has no authenticated
+# API calls, and its own /api/lead is served by Pages Functions, not this Worker.
+ALLOWED_ORIGINS       = "https://pullupadmin.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com,https://pulluppartner.aegisassetllc.com,https://pullupportal.aegisassetllc.com"
 CF_ACCESS_TEAM_DOMAIN = "aegis-dashboard.cloudflareaccess.com"
 # One AUD per Access application — a token may carry any of them.
 # admin, rider, api, client portal
