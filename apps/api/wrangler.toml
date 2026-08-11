@@ -25,6 +25,14 @@ zone_name = "aegisassetllc.com"
 pattern = "pullupcustomer.aegisassetllc.com/api/*"
 zone_name = "aegisassetllc.com"
 
+# Client portal (Pages project pullup-web, behind the "PullUp Client Portal"
+# Access application). Serving /api/* from the same host means portal requests
+# are same-origin, so the CF_Authorization cookie Access sets is actually sent —
+# a cross-origin call to api.aegisassetllc.com would never carry it.
+[[routes]]
+pattern = "pullupportal.aegisassetllc.com/api/*"
+zone_name = "aegisassetllc.com"
+
 # --------------------------------------------------------------------
 # Bindings (fill IDs after `wrangler d1 create` / `wrangler r2 bucket create`)
 # --------------------------------------------------------------------
@@ -108,10 +116,11 @@ FRONTEND_CUSTOMER_URL = "https://pullupcustomer.aegisassetllc.com"
 # Origins permitted to call the API from a browser. The marketing site and its
 # client portal (pullup-web) live on their own origin and authenticate with a
 # partner Bearer token, so they must be listed here explicitly.
-ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com,https://pullup-web.pages.dev,https://pullup.gh,https://www.pullup.gh"
+ALLOWED_ORIGINS       = "https://pullup.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com,https://pullupportal.aegisassetllc.com,https://pullup-web.pages.dev,https://pullup.gh,https://www.pullup.gh"
 CF_ACCESS_TEAM_DOMAIN = "aegis-dashboard.cloudflareaccess.com"
-# Three AUDs (comma-separated), one per Access application — token can carry any.
-CF_ACCESS_AUD         = "224159b5912326257bc0ee012f7727193e3708631f3e70632fc406c646b90111,b58f3ac228de8f6b297ff74c51a442d6402c8163ef9afebc45f08abf77fa1a81,edaa3f63b88305167a606332d1d01a99266748b6d544e02db344d04e5cbadd40"
+# One AUD per Access application — a token may carry any of them.
+# admin, rider, api, client portal
+CF_ACCESS_AUD         = "224159b5912326257bc0ee012f7727193e3708631f3e70632fc406c646b90111,b58f3ac228de8f6b297ff74c51a442d6402c8163ef9afebc45f08abf77fa1a81,edaa3f63b88305167a606332d1d01a99266748b6d544e02db344d04e5cbadd40,154ad300de820eeaa6dcf384dd651718512d092374b4223521e0da4f83d91507"
 CF_ACCOUNT_ID         = "e1ae61e9ae55a87ae70b9920e8c54aa5"
 CF_ACCESS_RIDERS_GROUP_ID = "7d0335f7-4422-4bc5-a05d-633271f4477e"
 

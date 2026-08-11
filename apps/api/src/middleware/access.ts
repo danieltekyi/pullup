@@ -148,17 +148,33 @@ async function loadOrCreateProfile(
       rider_id: string | null
     }>()
 
+  // A client signing in through the Access-protected portal is identified by
+  // the email Access verified. Map that to their partner record so the request
+  // is scoped to their own orders (see getPartnerFilter). Without this a client
+  // would authenticate successfully and then see nothing, or would need a
+  // second sign-in to obtain a partner token.
+  const partner = await c.env.DB.prepare(
+    `SELECT id FROM partners WHERE email = ? AND active = 1 LIMIT 1`,
+  )
+    .bind(email)
+    .first<{ id: string }>()
+
   if (row) {
+    // Never demote a staff account just because the address also appears in the
+    // partners table.
+    const isStaff = row.role === 'super-admin' || row.role === 'manager'
+    const role: Role = !isStaff && partner ? 'partner' : row.role
     return {
       sub,
       email,
       id: row.id,
       name: row.name,
-      role: row.role,
+      role,
       status: row.status,
       branchId: row.branch_id ?? undefined,
       managerId: row.manager_id ?? undefined,
       riderId: row.rider_id ?? undefined,
+      partnerId: partner?.id,
     }
   }
 
@@ -171,7 +187,9 @@ async function loadOrCreateProfile(
   const isFirstUser = (totalRow?.c ?? 0) === 0
   const initialRole: Role = isFirstUser && bootstrapEmail && email === bootstrapEmail
     ? 'super-admin'
-    : 'rider'
+    : partner
+      ? 'partner'
+      : 'rider'
 
   const id = sub || `usr_${crypto.randomUUID()}`
   await c.env.DB.prepare(
@@ -187,6 +205,7 @@ async function loadOrCreateProfile(
     role: initialRole,
     status: 'active',
     branchId: 'default',
+    partnerId: partner?.id,
   }
 }
 
