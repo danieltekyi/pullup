@@ -71,11 +71,11 @@ app.get('/api/auth/debug', c => {
 
 // SECURITY (DEF-002): throttle the public surface. Tracker validate is the
 // endpoint that previously allowed unbounded customer-record probing.
-app.use('/api/tracker/validate', rateLimit({ bucket: 'tracker-validate', limit: 20, windowSeconds: 60 }))
-app.use('/api/tracker/proxy', rateLimit({ bucket: 'tracker-proxy', limit: 60, windowSeconds: 60 }))
+app.use('/api/tracker/validate', rateLimit({ binding: 'RL_PUBLIC' }))
+app.use('/api/tracker/proxy', rateLimit({ binding: 'RL_PUBLIC' }))
 // Estimate calls the paid Google Distance Matrix API — cap it hard (DEF-006).
-app.use('/api/public/orders/estimate', rateLimit({ bucket: 'public-estimate', limit: 15, windowSeconds: 60 }))
-app.use('/api/public/orders', rateLimit({ bucket: 'public-order-create', limit: 10, windowSeconds: 600 }))
+app.use('/api/public/orders/estimate', rateLimit({ binding: 'RL_ESTIMATE' }))
+app.use('/api/public/orders', rateLimit({ binding: 'RL_ORDER_CREATE' }))
 
 // Public endpoints — no Access needed
 app.route('/api/rider-auth', riderAuthRouter)

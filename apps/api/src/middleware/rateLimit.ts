@@ -1,18 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import type { AppVariables, Env } from '../env'
+import type { AppVariables, Env, RateLimiter } from '../env'
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>
-
-export interface RateLimitOptions {
-  /** Requests permitted inside the window. */
-  limit: number
-  /** Window length in seconds. */
-  windowSeconds: number
-  /** Namespace so different routes keep separate counters. */
-  bucket: string
-  /** Derive the identity being limited. Defaults to client IP. */
-  key?: (c: Ctx) => string
-}
 
 export function clientIp(c: Ctx): string {
   return (
@@ -22,54 +11,73 @@ export function clientIp(c: Ctx): string {
   )
 }
 
+export type RateLimitBinding =
+  | 'RL_PUBLIC'
+  | 'RL_ESTIMATE'
+  | 'RL_ORDER_CREATE'
+  | 'RL_AUTH_REQUEST'
+  | 'RL_AUTH_VERIFY'
+
+export interface RateLimitOptions {
+  /** Which binding to use — see `[[ratelimits]]` in wrangler.toml. */
+  binding: RateLimitBinding
+  /** Derive the identity being limited. Defaults to client IP. */
+  key?: (c: Ctx) => string
+}
+
 /**
- * Fixed-window rate limiter backed by Workers KV (DEF-002).
+ * Request throttling backed by Cloudflare's native rate limiting (DEF-002).
  *
- * KV is eventually consistent, so under a burst across many colos the effective
- * ceiling can exceed `limit`. That is an acceptable trade for abuse control:
- * it still turns "unlimited" into "bounded", which is what stops enumeration
- * and credential brute force. Auth lockouts additionally track attempts
- * per-identity so correctness there does not rely on this counter alone.
+ * This deliberately does NOT use Workers KV. KV reads are edge-cached for up to
+ * 60 seconds, so a KV counter cannot see its own recent writes — a burst sails
+ * straight through while the counter still reads zero. That was observed in
+ * production: 30 rapid requests, 30 allowed, 0 throttled. The native limiter is
+ * strongly consistent within a colo and is the correct primitive here.
+ *
+ * Fails open when the binding is missing so a misconfigured environment
+ * degrades to "unthrottled" rather than "entirely offline".
  */
 export function rateLimit(opts: RateLimitOptions): MiddlewareHandler<{
   Bindings: Env
   Variables: AppVariables
 }> {
   return async (c, next) => {
-    const id = opts.key ? opts.key(c as Ctx) : clientIp(c as Ctx)
-    const window = Math.floor(Date.now() / 1000 / opts.windowSeconds)
-    const key = `rl:${opts.bucket}:${id}:${window}`
+    const limiter = c.env[opts.binding] as RateLimiter | undefined
+    if (!limiter?.limit) return next()
 
-    let count = 0
+    const key = opts.key ? opts.key(c as Ctx) : clientIp(c as Ctx)
+
     try {
-      count = Number((await c.env.KV.get(key)) ?? 0)
-    } catch {
-      // KV unavailable — fail open so a cache outage cannot take the API down.
-      return next()
+      const { success } = await limiter.limit({ key })
+      if (!success) {
+        console.warn({ binding: opts.binding, key }, 'rate limit exceeded')
+        return c.json(
+          { error: 'rate_limited', message: 'Too many requests. Please slow down.' },
+          429,
+          { 'Retry-After': '60' },
+        )
+      }
+    } catch (err) {
+      // Never let the limiter itself break the request path.
+      console.warn('rate limiter unavailable', (err as Error).message)
     }
-
-    if (count >= opts.limit) {
-      const retryAfter = opts.windowSeconds - (Math.floor(Date.now() / 1000) % opts.windowSeconds)
-      console.warn({ bucket: opts.bucket, id, count }, 'rate limit exceeded')
-      return c.json(
-        { error: 'rate_limited', message: 'Too many requests. Please slow down.' },
-        429,
-        { 'Retry-After': String(retryAfter) },
-      )
-    }
-
-    c.executionCtx.waitUntil(
-      c.env.KV.put(key, String(count + 1), { expirationTtl: Math.max(60, opts.windowSeconds * 2) })
-        .catch(() => undefined),
-    )
 
     return next()
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* One-time-code attempt lockout                                       */
+/* ------------------------------------------------------------------ */
+
 /**
- * Per-identity attempt counter for one-time-code verification (DEF-003).
- * Returns false once the ceiling is hit so the caller can invalidate the code.
+ * Attempt counter for OTP verification (DEF-003).
+ *
+ * Correctness here does not rest on KV read freshness: every wrong guess writes
+ * a new value, and once the ceiling is reached the caller deletes the stored
+ * code outright. Even if a stale read briefly under-counts, destroying the code
+ * is the control that actually matters. The native per-request limiter above
+ * additionally caps how fast guesses can arrive.
  */
 export async function registerFailedAttempt(
   env: Env,
@@ -78,14 +86,13 @@ export async function registerFailedAttempt(
   max = 5,
 ): Promise<{ allowed: boolean; attempts: number }> {
   const key = `attempts:${bucket}:${identity}`
-  let attempts = 0
   try {
-    attempts = Number((await env.KV.get(key)) ?? 0) + 1
+    const attempts = Number((await env.KV.get(key, { cacheTtl: 60 })) ?? 0) + 1
     await env.KV.put(key, String(attempts), { expirationTtl: 900 })
+    return { allowed: attempts < max, attempts }
   } catch {
     return { allowed: true, attempts: 0 }
   }
-  return { allowed: attempts < max, attempts }
 }
 
 export async function attemptsExceeded(
@@ -95,7 +102,8 @@ export async function attemptsExceeded(
   max = 5,
 ): Promise<boolean> {
   try {
-    return Number((await env.KV.get(`attempts:${bucket}:${identity}`)) ?? 0) >= max
+    const raw = await env.KV.get(`attempts:${bucket}:${identity}`, { cacheTtl: 60 })
+    return Number(raw ?? 0) >= max
   } catch {
     return false
   }

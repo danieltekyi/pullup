@@ -11,8 +11,8 @@ import { rateLimit, attemptsExceeded, registerFailedAttempt, clearAttempts } fro
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
 // SECURITY (DEF-002): throttle both ends of the OTP flow.
-app.use('/request', rateLimit({ bucket: 'rider-otp-request', limit: 5, windowSeconds: 300 }))
-app.use('/verify', rateLimit({ bucket: 'rider-otp-verify', limit: 10, windowSeconds: 300 }))
+app.use('/request', rateLimit({ binding: 'RL_AUTH_REQUEST' }))
+app.use('/verify', rateLimit({ binding: 'RL_AUTH_VERIFY' }))
 
 // Secret for signing rider session JWTs.
 // SECURITY (DEF-013): prefer a dedicated secret. Falls back to the tracker

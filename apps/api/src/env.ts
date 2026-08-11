@@ -1,8 +1,20 @@
+export interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>
+}
+
 export interface Env {
   // Bindings
   DB: D1Database
   PROOF_BUCKET: R2Bucket
   KV: KVNamespace
+
+  // Native rate limiting bindings — see [[ratelimits]] in wrangler.toml.
+  // Optional so local dev and older deployments keep working (fails open).
+  RL_PUBLIC?: RateLimiter
+  RL_ESTIMATE?: RateLimiter
+  RL_ORDER_CREATE?: RateLimiter
+  RL_AUTH_REQUEST?: RateLimiter
+  RL_AUTH_VERIFY?: RateLimiter
 
   // Vars
   FRONTEND_ADMIN_URL: string
