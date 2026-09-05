@@ -7,7 +7,7 @@ import { getPermissionsForRole, listUsers, setPermissionsForRole, updateUser } f
 import { listBranches, findBranch, upsertBranch, deleteZone, listZoneRates, listZones, upsertZone, upsertZoneRate, listParams, upsertParam, subscribePush, unsubscribePush } from '../repos/misc'
 import { computePhysicsCost, type PhysicsParams } from '@pullup/shared'
 import { forbidden, notFound } from '../lib/errors'
-import { listOrders } from '../repos/orders'
+import { orderStatusCounts, orderTrend, findSlaAtRisk, type TrendPeriod } from '../repos/orders'
 import { listRiders } from '../repos/riders'
 import { financeSummary } from '../repos/finance'
 import { fetchAllActivePartners } from '../services/partnerFetch'
@@ -143,18 +143,20 @@ app.put('/params/:id', requireAuth(), requireRole('super-admin', 'manager'), asy
 app.get('/analytics/summary', requireAuth(), async c => {
   const b = getBranchFilter(c)
   const branchId = b === '__ALL__' ? undefined : b
-  const [orders, riders, finance] = await Promise.all([
-    listOrders(c.env, { branchId, limit: 200 }),
+  const [counts, riders, finance] = await Promise.all([
+    orderStatusCounts(c.env, branchId),
     listRiders(c.env, branchId),
     financeSummary(c.env, branchId),
   ])
-  const active = new Set(['pending', 'assigned', 'picked_up', 'in_transit', 'awaiting_confirmation'])
+  // Counted in SQL across every order. This used to filter a 200-row page,
+  // which meant the dashboard stopped counting at 200 and said so confidently.
+  const n = (...statuses: string[]) => statuses.reduce((sum, s) => sum + (counts.byStatus[s] ?? 0), 0)
   return c.json({
-    totalOrders: orders.items.length,
-    pendingOrders: orders.items.filter(o => o.status === 'pending').length,
-    assignedOrders: orders.items.filter(o => o.status === 'assigned').length,
-    deliveredOrders: orders.items.filter(o => o.status === 'confirmed' || o.status === 'delivered').length,
-    inFlightOrders: orders.items.filter(o => active.has(o.status)).length,
+    totalOrders: counts.total,
+    pendingOrders: n('pending'),
+    assignedOrders: n('assigned'),
+    deliveredOrders: n('delivered', 'confirmed'),
+    inFlightOrders: n('pending', 'assigned', 'picked_up', 'in_transit', 'awaiting_confirmation'),
     totalRiders: riders.length,
     activeRiders: riders.filter(r => r.status === 'active').length,
     totalRevenue: finance.totalRevenue,
@@ -163,26 +165,31 @@ app.get('/analytics/summary', requireAuth(), async c => {
     codOutstanding: finance.codOutstanding,
   })
 })
+
 app.get('/analytics/orders', requireAuth(), async c => {
   const b = getBranchFilter(c)
-  const period = c.req.query('period') || 'daily'
-  const { items } = await listOrders(c.env, { branchId: b === '__ALL__' ? undefined : b, limit: 500 })
-  const buckets: Record<string, { count: number; revenue: number }> = {}
-  for (const o of items) {
-    const d = new Date(o.createdAt)
-    let label = d.toISOString().slice(0, 10)
-    if (period === 'monthly') label = d.toISOString().slice(0, 7)
-    else if (period === 'yearly') label = String(d.getFullYear())
-    else if (period === 'weekly') {
-      const first = new Date(d.getFullYear(), 0, 1)
-      const week = Math.ceil(((d.getTime() - first.getTime()) / 86_400_000 + first.getDay() + 1) / 7)
-      label = `W${week}-${d.getFullYear()}`
-    }
-    buckets[label] = buckets[label] || { count: 0, revenue: 0 }
-    buckets[label].count++
-    buckets[label].revenue += o.cost ?? 0
-  }
-  return c.json(Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b)).map(([label, v]) => ({ label, ...v })))
+  const requested = c.req.query('period')
+  const period: TrendPeriod =
+    requested === 'weekly' || requested === 'monthly' || requested === 'yearly' ? requested : 'daily'
+  const series = await orderTrend(c.env, period, b === '__ALL__' ? undefined : b)
+  return c.json(series)
+})
+
+// Orders whose SLA deadline has passed or is imminent. sla_by was stored on
+// every order and read by nothing, so a breach was invisible until a customer
+// complained.
+app.get('/analytics/sla', requireAuth(), async c => {
+  const within = Number(c.req.query('within') ?? 30)
+  const { breached, atRisk } = await findSlaAtRisk(c.env, Number.isFinite(within) ? within : 30)
+  const slim = (o: { id: string; status: string; slaBy?: string; destination?: string; assignedTo?: string }) => ({
+    id: o.id, status: o.status, slaBy: o.slaBy, destination: o.destination, assignedTo: o.assignedTo,
+  })
+  return c.json({
+    breachedCount: breached.length,
+    atRiskCount: atRisk.length,
+    breached: breached.map(slim),
+    atRisk: atRisk.map(slim),
+  })
 })
 
 // -------- push notifications --------

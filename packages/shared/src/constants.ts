@@ -28,6 +28,33 @@ export const ORDER_STATUS_FLOW: Record<OrderStatus, OrderStatus[]> = {
   cancelled: [],
 }
 
+/** States an order can never leave. */
+export const TERMINAL_ORDER_STATUSES: OrderStatus[] = ['confirmed', 'returned', 'cancelled']
+
+/**
+ * Whether an order may move from one status to another.
+ *
+ * Re-applying the current status counts as legal: a rider on a poor connection
+ * retrying the same request should get the order back rather than an error.
+ *
+ * This lives beside the flow it enforces because for a long time the flow was
+ * declared here and checked nowhere, which let an order jump straight from
+ * pending to delivered — leaving assigned_at and picked_up_at null on a
+ * delivered order and quietly corrupting any duration measured from them.
+ */
+export function isLegalTransition(from: OrderStatus, to: OrderStatus): boolean {
+  if (from === to) return true
+  return (ORDER_STATUS_FLOW[from] ?? []).includes(to)
+}
+
+/** Human-readable list of where an order can go next, for error messages. */
+export function describeNextStatuses(from: OrderStatus): string {
+  const allowed = ORDER_STATUS_FLOW[from] ?? []
+  return allowed.length
+    ? allowed.map(s => ORDER_STATUS_LABELS[s]).join(', ')
+    : 'nothing — this is a final state'
+}
+
 export const ROLES: Role[] = ['super-admin', 'manager', 'rider', 'partner']
 
 export const COGNITO_GROUPS = {

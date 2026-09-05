@@ -16,6 +16,7 @@ import publicOrdersRouter from './routes/publicOrders'
 import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
 import { rateLimit } from './middleware/rateLimit'
+import { slaSweep } from './services/slaWatch'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -98,6 +99,9 @@ app.onError(errorHandler)
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    // Independent: an SLA breach still needs alerting even if a partner feed is
+    // down, so these do not share a promise chain.
     ctx.waitUntil(scheduledPartnerFetch(env).then(() => undefined).catch(err => console.error('partner fetch cron failed', err)))
+    ctx.waitUntil(slaSweep(env).then(() => undefined).catch(err => console.error('sla sweep cron failed', err)))
   },
 }

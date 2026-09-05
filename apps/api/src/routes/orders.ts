@@ -3,8 +3,9 @@ import { z } from 'zod'
 import type { Env, AppVariables } from '../env'
 import { requireAuth } from '../middleware/access'
 import { getBranchFilter, getRiderFilter, getPartnerFilter } from '../middleware/branchScope'
-import { badRequest, forbidden, notFound, unprocessable } from '../lib/errors'
+import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors'
 import type { AuditActor, Order, OrderStatus } from '@pullup/shared'
+import { ORDER_STATUS_FLOW, ORDER_STATUS_LABELS, isLegalTransition, describeNextStatuses } from '@pullup/shared'
 import {
   createOrder,
   findOrder,
@@ -151,6 +152,7 @@ app.post('/:id/assign', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
   const body = assignSchema.parse(await c.req.json())
+  assertLegalTransition(order.status, 'assigned')
   const effectiveCost = body.cost ?? order.cost
   if (order.partnerId && !effectiveCost) throw unprocessable('Set delivery fee before assigning a partner order')
   const before = { ...order }
@@ -192,6 +194,14 @@ app.post('/bulk-assign', requireAuth(), async c => {
   const blocked = orders.filter(o => o!.partnerId && !o!.cost && !body.cost)
   if (blocked.length) {
     throw unprocessable(`${blocked.length} order(s) need pricing`, { blockedIds: blocked.map(o => o!.id) })
+  }
+  // Checked before any write so a bad selection fails whole rather than leaving
+  // half the batch assigned. There is no transaction across these updates.
+  const illegal = orders.filter(o => o!.status !== 'assigned' && !(ORDER_STATUS_FLOW[o!.status] ?? []).includes('assigned'))
+  if (illegal.length) {
+    throw conflict(
+      `${illegal.length} order(s) cannot be assigned from their current status`,
+    )
   }
   const results: Order[] = []
   for (const o of orders) {
@@ -238,12 +248,28 @@ const statusSchema = z.object({
   codCollected: z.number().nonnegative().optional(),
 })
 
+/**
+ * Rejects a status change the lifecycle does not allow.
+ *
+ * The rule itself lives in @pullup/shared beside the flow it enforces, so the
+ * rider app and the admin console can grey out impossible actions using exactly
+ * the same logic the server rejects on.
+ */
+function assertLegalTransition(from: OrderStatus, to: OrderStatus) {
+  if (isLegalTransition(from, to)) return
+  throw conflict(
+    `Cannot move an order from ${ORDER_STATUS_LABELS[from]} to ${ORDER_STATUS_LABELS[to]}. ` +
+      `Allowed from here: ${describeNextStatuses(from)}.`,
+  )
+}
+
 app.put('/:id/status', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
   const user = c.get('user')!
   if (user.role === 'rider' && order.assignedTo !== user.riderId) throw forbidden('not your order')
   const body = statusSchema.parse(await c.req.json())
+  assertLegalTransition(order.status, body.status)
   const before = { ...order }
   const patch: Partial<Order> = { status: body.status }
   const now = new Date().toISOString()
@@ -273,6 +299,7 @@ app.put('/:id/confirm', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
   if (c.get('user')!.role === 'rider') throw forbidden('managers only')
+  assertLegalTransition(order.status, 'confirmed')
   const before = { ...order }
   const updated = await updateOrder(c.env, order.id, {
     status: 'confirmed',
@@ -288,6 +315,7 @@ app.put('/:id/reject', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
   if (c.get('user')!.role === 'rider') throw forbidden('managers only')
+  assertLegalTransition(order.status, 'rejected')
   const before = { ...order }
   const updated = await updateOrder(c.env, order.id, {
     status: 'rejected',

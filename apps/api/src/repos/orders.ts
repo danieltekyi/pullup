@@ -93,6 +93,131 @@ export async function listOrders(env: Env, f: ListFilters): Promise<{ items: Ord
   return { items, cursor }
 }
 
+/**
+ * Counts every order matching the filter, grouped by status.
+ *
+ * The dashboard previously derived these by fetching a page of orders and
+ * calling .filter() on it. Because listOrders caps at 200 rows, the counts
+ * silently stopped rising once the business passed 200 orders — the dashboard
+ * reported 200 with no error and no way to tell it was wrong.
+ */
+export async function orderStatusCounts(
+  env: Env,
+  branchId?: string,
+): Promise<{ total: number; byStatus: Record<string, number> }> {
+  const parts: string[] = ['deleted_at IS NULL']
+  const values: unknown[] = []
+  if (branchId && branchId !== '__ALL__') {
+    parts.push('branch_id = ?')
+    values.push(branchId)
+  }
+  const res = await env.DB.prepare(
+    `SELECT status, COUNT(*) AS n FROM orders WHERE ${parts.join(' AND ')} GROUP BY status`,
+  )
+    .bind(...values)
+    .all<{ status: string; n: number }>()
+
+  const byStatus: Record<string, number> = {}
+  let total = 0
+  for (const row of res.results ?? []) {
+    byStatus[row.status] = row.n
+    total += row.n
+  }
+  return { total, byStatus }
+}
+
+export type TrendPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+/**
+ * strftime patterns per period.
+ *
+ * Exported so the label format is testable without a database. %W is
+ * Monday-based and zero-padded, so labels sort lexically in the order the
+ * periods actually occur. The previous implementation built labels like
+ * "W5-2026" in JavaScript, which sorted W10 before W5 and produced a chart with
+ * the weeks out of order.
+ */
+export const TREND_FORMATS: Record<TrendPeriod, string> = {
+  daily: '%Y-%m-%d',
+  weekly: '%Y-W%W',
+  monthly: '%Y-%m',
+  yearly: '%Y',
+}
+
+/**
+ * Order volume and revenue per period, aggregated in SQL over the whole table
+ * rather than over a truncated page.
+ */
+export async function orderTrend(
+  env: Env,
+  period: TrendPeriod,
+  branchId?: string,
+  limit = 365,
+): Promise<{ label: string; count: number; revenue: number }[]> {
+  const fmt = TREND_FORMATS[period] ?? TREND_FORMATS.daily
+
+  const parts: string[] = ['deleted_at IS NULL']
+  const values: unknown[] = []
+  if (branchId && branchId !== '__ALL__') {
+    parts.push('branch_id = ?')
+    values.push(branchId)
+  }
+
+  const res = await env.DB.prepare(
+    `SELECT strftime(?, created_at) AS label,
+            COUNT(*)                AS count,
+            COALESCE(SUM(cost), 0)  AS revenue
+       FROM orders
+      WHERE ${parts.join(' AND ')}
+      GROUP BY label
+      ORDER BY label DESC
+      LIMIT ?`,
+  )
+    .bind(fmt, ...values, limit)
+    .all<{ label: string; count: number; revenue: number }>()
+
+  // Newest-first from SQL so the LIMIT keeps recent periods; reversed here so
+  // the chart reads left to right.
+  return (res.results ?? []).reverse()
+}
+
+/**
+ * Orders whose SLA deadline has passed, or is about to, and which have not
+ * reached a terminal state.
+ *
+ * sla_by has been written on every order since the schema was created and read
+ * by nothing, so a missed deadline produced no signal anywhere.
+ */
+export async function findSlaAtRisk(
+  env: Env,
+  withinMinutes = 30,
+  limit = 100,
+): Promise<{ breached: Order[]; atRisk: Order[] }> {
+  const now = new Date()
+  const soon = new Date(now.getTime() + withinMinutes * 60_000).toISOString()
+  const nowIso = now.toISOString()
+
+  // Terminal states are excluded: an order that already finished cannot breach.
+  const OPEN = ['pending', 'assigned', 'picked_up', 'in_transit']
+  const res = await env.DB.prepare(
+    `SELECT * FROM orders
+      WHERE deleted_at IS NULL
+        AND sla_by IS NOT NULL
+        AND sla_by <= ?
+        AND status IN (${OPEN.map(() => '?').join(',')})
+      ORDER BY sla_by ASC
+      LIMIT ?`,
+  )
+    .bind(soon, ...OPEN, limit)
+    .all<Record<string, unknown>>()
+
+  const rows = (res.results ?? []).map(r => rowToObj<Order>(r, JSON_COLS)!)
+  return {
+    breached: rows.filter(o => (o.slaBy ?? '') <= nowIso),
+    atRisk: rows.filter(o => (o.slaBy ?? '') > nowIso),
+  }
+}
+
 export async function createOrder(
   env: Env,
   data: Partial<Order> & { branchId: string; customerName: string; destination: string; paymentMethod: string },
