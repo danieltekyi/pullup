@@ -50,13 +50,16 @@ function html(breached: Order[], atRisk: Order[]): string {
 }
 
 /**
- * Returns only the orders not alerted on recently, and records the ones it
- * returns. Uses KV rather than a database column so it adds no migration.
+ * Returns only the orders not alerted on recently.
+ *
+ * Deliberately does not record anything — see markAlerted. If this both read
+ * and wrote, an alert that failed to reach anyone would still be suppressed for
+ * an hour, turning a delivery failure into a silent one.
  *
  * If KV is unavailable the order is treated as unseen: a duplicate alert is a
- * far better failure than a silent one.
+ * far better failure than a missing one.
  */
-async function filterAlreadyAlerted(env: Env, orders: Order[]): Promise<Order[]> {
+async function unalertedRecently(env: Env, orders: Order[]): Promise<Order[]> {
   const now = Date.now()
   const fresh: Order[] = []
   for (const o of orders) {
@@ -68,14 +71,19 @@ async function filterAlreadyAlerted(env: Env, orders: Order[]): Promise<Order[]>
       fresh.push(o)
     }
   }
+  return fresh
+}
+
+/** Starts the quiet period. Called only once an alert has actually landed. */
+async function markAlerted(env: Env, orders: Order[]): Promise<void> {
+  const now = String(Date.now())
   await Promise.all(
-    fresh.map(o =>
+    orders.map(o =>
       env.KV
-        .put(seenKey(o.id), String(now), { expirationTtl: Math.ceil((REALERT_AFTER_MS * 2) / 1000) })
+        .put(seenKey(o.id), now, { expirationTtl: Math.ceil((REALERT_AFTER_MS * 2) / 1000) })
         .catch(() => undefined),
     ),
   )
-  return fresh
 }
 
 export async function slaSweep(env: Env): Promise<{
@@ -89,7 +97,7 @@ export async function slaSweep(env: Env): Promise<{
     return { breached: 0, atRisk: 0, alerted: 0, notified: [] }
   }
 
-  const fresh = await filterAlreadyAlerted(env, [...breached, ...atRisk])
+  const fresh = await unalertedRecently(env, [...breached, ...atRisk])
   if (!fresh.length) {
     return { breached: breached.length, atRisk: atRisk.length, alerted: 0, notified: [] }
   }
@@ -109,7 +117,11 @@ export async function slaSweep(env: Env): Promise<{
   const notified: string[] = []
   await Promise.all(
     recipients.map(async u => {
-      const results = await Promise.allSettled([
+      // Both helpers report failure by return value rather than by throwing, so
+      // settling tells us nothing. Checking only that the promise fulfilled
+      // would mark a rejected email as delivered and silence the warning below
+      // — the exact failure this sweep exists to prevent.
+      const [mail, push] = await Promise.allSettled([
         sendEmail(env, {
           to: u.email,
           subject: freshBreached.length
@@ -123,17 +135,29 @@ export async function slaSweep(env: Env): Promise<{
           url: '/orders',
         }),
       ])
-      if (results.some(r => r.status === 'fulfilled')) notified.push(u.email)
+
+      const mailed = mail.status === 'fulfilled' && mail.value.ok === true
+      const pushed = push.status === 'fulfilled' && push.value.sent > 0
+
+      if (mail.status === 'fulfilled' && !mail.value.ok && !mail.value.skipped) {
+        console.error(`SLA alert email to ${u.email} rejected:`, mail.value.error ?? mail.value.status)
+      }
+      if (mailed || pushed) notified.push(u.email)
     }),
   )
 
   if (!notified.length) {
     // Loud, because a silent SLA watcher is worse than none — it creates the
-    // belief that someone is watching.
+    // belief that someone is watching. Nothing is marked as alerted here, so
+    // the next run retries rather than starting a quiet period on an alert
+    // that never arrived.
     console.error(
       `SLA SWEEP FOUND ${freshBreached.length} BREACHED AND ${freshAtRisk.length} AT RISK BUT NOTIFIED NOBODY. ` +
-        'Check that an active manager or super-admin exists and that RESEND_API_KEY is set.',
+        'Check that an active manager or super-admin exists, that RESEND_API_KEY is set, ' +
+        'and that FROM_EMAIL uses a domain verified with the email provider.',
     )
+  } else {
+    await markAlerted(env, fresh)
   }
 
   return {
