@@ -2,6 +2,7 @@ import type { Env } from '../env'
 import { rowToObj, buildUpdate, encodeCursor, decodeCursor } from '../lib/db'
 import { newId, nowIso } from '../lib/ids'
 import type { Order, OrderStatus } from '@pullup/shared'
+import { defaultSlaBy } from '@pullup/shared'
 import { conflict, notFound } from '../lib/errors'
 
 const JSON_COLS = ['proof']
@@ -246,7 +247,10 @@ export async function createOrder(
     partner_order_id: data.partnerOrderId,
     delivery_fee_from_partner: data.deliveryFeeFromPartner,
     revenue_status: data.revenueStatus ?? 'none',
-    sla_by: data.slaBy,
+    // Defaulted rather than left null. Every order in the database had a null
+    // deadline because nothing ever supplied one, which made the SLA column
+    // unwatchable in principle, not merely unwatched.
+    sla_by: data.slaBy ?? defaultSlaBy(data.priority, new Date(now)),
     created_by: data.createdBy,
     created_at: now,
     updated_at: now,

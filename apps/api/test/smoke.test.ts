@@ -7,6 +7,8 @@ import {
   TERMINAL_ORDER_STATUSES,
   isLegalTransition,
   describeNextStatuses,
+  defaultSlaBy,
+  SLA_HOURS_BY_PRIORITY,
 } from '@pullup/shared'
 import type { OrderStatus } from '@pullup/shared'
 import { TREND_FORMATS } from '../src/repos/orders'
@@ -74,6 +76,35 @@ describe('order lifecycle (F-04)', () => {
   it('explains where an order can go instead', () => {
     expect(describeNextStatuses('pending')).toContain('Assigned')
     expect(describeNextStatuses('confirmed')).toContain('final state')
+  })
+})
+
+describe('SLA deadlines (F-05)', () => {
+  const at = new Date('2026-09-05T09:00:00.000Z')
+
+  it('gives every order a deadline, because none previously had one', () => {
+    // Verified against production: all 12 orders had sla_by NULL. A column
+    // nothing writes cannot be a column anything watches, so the SLA watcher
+    // would have found nothing forever.
+    expect(defaultSlaBy('normal', at)).toBe('2026-09-05T17:00:00.000Z')
+  })
+
+  it('gives an urgent delivery less time than a normal one', () => {
+    expect(new Date(defaultSlaBy('urgent', at)).getTime())
+      .toBeLessThan(new Date(defaultSlaBy('normal', at)).getTime())
+    expect(new Date(defaultSlaBy('normal', at)).getTime())
+      .toBeLessThan(new Date(defaultSlaBy('low', at)).getTime())
+  })
+
+  it('falls back to the normal window for an unknown priority', () => {
+    expect(defaultSlaBy(undefined, at)).toBe(defaultSlaBy('normal', at))
+    expect(defaultSlaBy('nonsense', at)).toBe(defaultSlaBy('normal', at))
+  })
+
+  it('always produces a deadline in the future', () => {
+    for (const p of Object.keys(SLA_HOURS_BY_PRIORITY)) {
+      expect(new Date(defaultSlaBy(p, at)).getTime()).toBeGreaterThan(at.getTime())
+    }
   })
 })
 

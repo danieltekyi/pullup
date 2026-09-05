@@ -31,6 +31,29 @@ export const ORDER_STATUS_FLOW: Record<OrderStatus, OrderStatus[]> = {
 /** States an order can never leave. */
 export const TERMINAL_ORDER_STATUSES: OrderStatus[] = ['confirmed', 'returned', 'cancelled']
 
+/** Hours allowed for a delivery before it counts as late, by priority. */
+export const SLA_HOURS_BY_PRIORITY: Record<string, number> = {
+  urgent: 3,
+  normal: 8,
+  low: 24,
+}
+
+/**
+ * The deadline a delivery is measured against.
+ *
+ * sla_by has always been an optional field on the create request, and in
+ * practice no caller ever supplied one — every order in the database had a null
+ * deadline. A column nothing writes cannot be a column anything watches, so
+ * "we have SLA tracking" was true only in the schema.
+ *
+ * Defaulting it here rather than in a route means every creation path gets one:
+ * the admin console, customer self-serve, and partner feed imports alike.
+ */
+export function defaultSlaBy(priority: string | undefined, from: Date = new Date()): string {
+  const hours = SLA_HOURS_BY_PRIORITY[priority ?? 'normal'] ?? SLA_HOURS_BY_PRIORITY.normal
+  return new Date(from.getTime() + hours * 3_600_000).toISOString()
+}
+
 /**
  * Whether an order may move from one status to another.
  *
