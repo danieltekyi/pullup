@@ -90,6 +90,7 @@ export const MENU_KEYS = [
   'dashboard',
   'orders',
   'riders',
+  'compliance',
   'fleet',
   'partners',
   'finance',

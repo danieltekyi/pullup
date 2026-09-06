@@ -5,7 +5,8 @@ import { requireAuth } from '../middleware/access'
 import { getBranchFilter, getRiderFilter, getPartnerFilter } from '../middleware/branchScope'
 import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors'
 import type { AuditActor, Order, OrderStatus } from '@pullup/shared'
-import { ORDER_STATUS_FLOW, ORDER_STATUS_LABELS, isLegalTransition, describeNextStatuses } from '@pullup/shared'
+import { ORDER_STATUS_FLOW, ORDER_STATUS_LABELS, isLegalTransition, describeNextStatuses, canBeAssignedWork } from '@pullup/shared'
+import { findRider } from '../repos/riders'
 import {
   createOrder,
   findOrder,
@@ -148,11 +149,39 @@ app.put('/:id/cost', requireAuth(), async c => {
   return c.json(updated)
 })
 
+/**
+ * Refuses to hand work to a rider who is not cleared to take it.
+ *
+ * This is the point of the whole compliance model. PullUp no longer owns the
+ * bikes, so it cannot ensure a machine is insured or roadworthy — it can only
+ * check, and decline to dispatch when the check fails. Ghana requires
+ * third-party motor insurance and a roadworthy certificate to run a vehicle
+ * commercially; sending an uninsured rider out with a client's parcel is the
+ * company's exposure, not the rider's alone.
+ *
+ * Enforced on the server rather than by hiding the button, because a hidden
+ * button is a suggestion.
+ */
+async function assertRiderMayWork(env: Env, riderId: string) {
+  const rider = await findRider(env, riderId)
+  if (!rider) throw notFound('rider not found')
+  if (rider.status === 'inactive') {
+    throw conflict(`${rider.name} is not an active rider.`)
+  }
+  if (!canBeAssignedWork(rider.complianceStatus ?? 'pending')) {
+    throw conflict(
+      `${rider.name} cannot be assigned work until their documents are in order. ` +
+        'Open the rider in Compliance to see what is missing.',
+    )
+  }
+}
+
 app.post('/:id/assign', requireAuth(), async c => {
   const order = await findOrder(c.env, c.req.param('id'))
   if (!order) throw notFound()
   const body = assignSchema.parse(await c.req.json())
   assertLegalTransition(order.status, 'assigned')
+  await assertRiderMayWork(c.env, body.riderId)
   const effectiveCost = body.cost ?? order.cost
   if (order.partnerId && !effectiveCost) throw unprocessable('Set delivery fee before assigning a partner order')
   const before = { ...order }
@@ -188,6 +217,9 @@ const bulkSchema = z.object({
 
 app.post('/bulk-assign', requireAuth(), async c => {
   const body = bulkSchema.parse(await c.req.json())
+  // Checked once for the whole batch rather than per order: the rider either
+  // may work today or may not.
+  await assertRiderMayWork(c.env, body.riderId)
   const orders = await Promise.all(body.orderIds.map(id => findOrder(c.env, id)))
   const missing = body.orderIds.filter((_, i) => !orders[i])
   if (missing.length) throw notFound(`missing: ${missing.join(',')}`)

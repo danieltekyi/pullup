@@ -14,6 +14,7 @@ import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
 import LaunchpadPage from './pages/LaunchpadPage'
 import RidersPage from './pages/RidersPage'
+import CompliancePage from './pages/CompliancePage'
 import FleetPage from './pages/FleetPage'
 import PartnersPage from './pages/PartnersPage'
 import FinancePage from './pages/FinancePage'
@@ -59,6 +60,7 @@ function AdminApp() {
             <Route path="/launchpad" element={<LaunchpadPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/riders" element={<RidersPage />} />
+            <Route path="/compliance" element={<CompliancePage />} />
             <Route path="/fleet" element={<FleetPage />} />
             <Route path="/partners" element={<PartnersPage />} />
             <Route path="/finance" element={<FinancePage />} />

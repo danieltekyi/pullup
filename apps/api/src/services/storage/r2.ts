@@ -1,15 +1,19 @@
 import type { Env } from '../../env'
 import { newId } from '../../lib/ids'
 
-export type UploadKind = 'signature' | 'photo'
+export type UploadKind = 'signature' | 'photo' | 'document'
 
 const ALLOWED_MIME: Record<UploadKind, string[]> = {
   signature: ['image/png', 'image/jpeg'],
   photo: ['image/jpeg', 'image/png', 'image/webp'],
+  // Riders photograph a licence or insurance certificate on a phone; some send
+  // a PDF from an insurer instead.
+  document: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
 }
 const MAX_BYTES: Record<UploadKind, number> = {
   signature: 512 * 1024,
   photo: 5 * 1024 * 1024,
+  document: 8 * 1024 * 1024,
 }
 
 export interface UploadResult {
@@ -38,6 +42,33 @@ export async function saveProof(env: Env, kind: UploadKind, orderId: string, fil
 
 function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60)
+}
+
+/**
+ * Stores a rider's identity or compliance document.
+ *
+ * Kept under a separate prefix from delivery proofs because the sensitivity is
+ * different: a proof-of-delivery photo is a parcel on a doorstep, whereas these
+ * are licences, insurance certificates and national ID cards. Nothing here is
+ * ever served publicly — reads go through an authorised route.
+ */
+export async function saveRiderDocument(
+  env: Env,
+  riderId: string,
+  docType: string,
+  file: File,
+): Promise<UploadResult> {
+  if (!ALLOWED_MIME.document.includes(file.type)) {
+    throw new Error(`content type ${file.type} not allowed — send a photo or a PDF`)
+  }
+  if (file.size > MAX_BYTES.document) {
+    throw new Error(`file too large (max ${Math.round(MAX_BYTES.document / 1024 / 1024)} MB)`)
+  }
+  const s3Key = `riders/${riderId}/documents/${docType}/${newId('doc').slice(4)}-${sanitize(file.name)}`
+  await env.PROOF_BUCKET.put(s3Key, file.stream(), {
+    httpMetadata: { contentType: file.type },
+  })
+  return { s3Key, size: file.size }
 }
 
 export async function proofUrl(env: Env, s3Key: string): Promise<string | undefined> {

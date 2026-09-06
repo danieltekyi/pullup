@@ -17,6 +17,8 @@ import resourcesRouter from './routes/resources'
 import adminRouter, { scheduledPartnerFetch } from './routes/admin'
 import { rateLimit } from './middleware/rateLimit'
 import { slaSweep } from './services/slaWatch'
+import { complianceSweep } from './services/complianceWatch'
+import complianceRouter from './routes/compliance'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -87,6 +89,7 @@ app.route('/api/partner-auth', partnerAuthRouter)
 app.route('/api/public', publicOrdersRouter)
 
 app.route('/api/orders', ordersRouter)
+app.route('/api/compliance', complianceRouter)
 app.route('/api/sync', syncRouter)
 app.route('/api/tracker', trackerRouter)
 app.route('/api/riders', ridersRouter)
@@ -103,5 +106,6 @@ export default {
     // down, so these do not share a promise chain.
     ctx.waitUntil(scheduledPartnerFetch(env).then(() => undefined).catch(err => console.error('partner fetch cron failed', err)))
     ctx.waitUntil(slaSweep(env).then(() => undefined).catch(err => console.error('sla sweep cron failed', err)))
+    ctx.waitUntil(complianceSweep(env).then(() => undefined).catch(err => console.error('compliance sweep cron failed', err)))
   },
 }

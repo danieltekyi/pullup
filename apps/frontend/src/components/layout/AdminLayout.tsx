@@ -17,6 +17,7 @@ import {
   History,
   LayoutGrid,
   Menu,
+  ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { usePermissions } from '../../context/PermissionsContext'
@@ -36,6 +37,7 @@ const NAV: NavItem[] = [
   { key: 'orders', to: '/orders', label: 'Orders', icon: Package },
   { key: 'customers', to: '/customers', label: 'Customers', icon: UsersRound },
   { key: 'riders', to: '/riders', label: 'Riders', icon: Users },
+  { key: 'compliance', to: '/compliance', label: 'Compliance', icon: ShieldCheck },
   { key: 'fleet', to: '/fleet', label: 'Fleet', icon: Truck },
   { key: 'partners', to: '/partners', label: 'Partners', icon: Building2 },
   { key: 'finance', to: '/finance', label: 'Finance', icon: DollarSign },

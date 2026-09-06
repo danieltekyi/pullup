@@ -4,34 +4,41 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 type AppMode = 'admin' | 'rider' | 'customer' | 'partner'
 
+/**
+ * Per-app install identity.
+ *
+ * All four share the Midnight field so an installed PullUp app looks like
+ * PullUp on a home screen; the theme colour differs so a dispatcher running
+ * both admin and rider can tell the two apart in the task switcher.
+ */
 const MANIFESTS: Record<AppMode, { name: string; short_name: string; description: string; theme: string; bg: string }> = {
   admin: {
     name: 'PullUp Admin',
     short_name: 'PullUp',
     description: 'Delivery management console',
-    theme: '#4f46e5',
-    bg: '#0f172a',
+    theme: '#FF5A1F',
+    bg: '#0B1020',
   },
   rider: {
     name: 'PullUp Rider',
     short_name: 'Rider',
     description: 'PullUp delivery rider app',
-    theme: '#16a34a',
-    bg: '#052e16',
+    theme: '#FFC94B',
+    bg: '#0B1020',
   },
   customer: {
     name: 'PullUp Track',
     short_name: 'Track',
     description: 'Track your PullUp delivery',
-    theme: '#4f46e5',
-    bg: '#ffffff',
+    theme: '#FF5A1F',
+    bg: '#0B1020',
   },
   partner: {
     name: 'PullUp Partner',
     short_name: 'Partner',
     description: 'PullUp partner delivery portal',
-    theme: '#7c3aed',
-    bg: '#1e1b4b',
+    theme: '#7C5CFF',
+    bg: '#0B1020',
   },
 }
 
@@ -45,7 +52,7 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'icons/icon-192.png', 'icons/icon-512.png'],        manifest: {
+        includeAssets: ['favicon.ico', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-512-maskable.png', 'icons/apple-touch-icon.png'],        manifest: {
           name: m.name,
           short_name: m.short_name,
           description: m.description,
@@ -57,7 +64,10 @@ export default defineConfig(({ mode }) => {
           icons: [
             { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
             { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+            // A distinct file, not the rounded one reused. A launcher applies
+            // its own mask, so feeding it an already-rounded icon clips the
+            // corners twice and leaves the mark sitting in a shrunken circle.
+            { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           ],
         },
         workbox: {

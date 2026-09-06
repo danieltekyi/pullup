@@ -9,6 +9,7 @@ import { uploadProof } from '../../services/upload'
 import { subscribeToPush } from '../../services/push'
 import { Button, Card, Field, Input, Modal, StatusBadge, toast } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
+import RiderCompliance from './RiderCompliance'
 
 export default function RiderHome() {
   const { user, logout } = useAuth()
@@ -17,6 +18,7 @@ export default function RiderHome() {
   const [pending, setPending] = useState(0)
   const [online, setOnline] = useState(navigator.onLine)
   const [detail, setDetail] = useState<Order | null>(null)
+  const [tab, setTab] = useState<'deliveries' | 'documents'>('deliveries')
   const [proofOpen, setProofOpen] = useState<{ order: Order; kind: 'delivered' | 'failed' } | null>(null)
 
   async function load() {
@@ -113,6 +115,37 @@ export default function RiderHome() {
       </header>
 
       <div className="p-4">
+        {/*
+          Compliance sits above the round rather than behind a menu. A blocked
+          rider will otherwise open the app, see an empty list, and conclude
+          there is no work — rather than that their insurance lapsed.
+        */}
+        <div className="mb-4 flex gap-1 rounded-xl bg-slate-200/70 p-1">
+          {([
+            ['deliveries', "Today's round"],
+            ['documents', 'My documents'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
+                tab === key ? 'bg-white text-slate-900 shadow' : 'text-slate-500'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'documents' && user?.riderId && <RiderCompliance riderId={user.riderId} />}
+        {tab === 'documents' && !user?.riderId && (
+          <p className="py-10 text-center text-sm text-slate-500">
+            Your rider record is not linked yet. Ask dispatch to finish setting you up.
+          </p>
+        )}
+
+        {tab === 'deliveries' && (
+        <>
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold">
             Today's deliveries <span className="text-slate-400">({orders.length})</span>
@@ -183,6 +216,8 @@ export default function RiderHome() {
             </Card>
           ))}
         </div>
+        </>
+        )}
       </div>
 
       <Modal open={!!detail} onClose={() => setDetail(null)} title="Order details">

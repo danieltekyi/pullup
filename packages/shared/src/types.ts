@@ -144,6 +144,46 @@ export interface Rider {
   ratePerDelivery?: number
   ratePctOfFee?: number
   documents?: Array<{ type: string; expiry: string; s3Key?: string }>
+  /** Owner-operator model: the rider works their own machine. */
+  ownsBike?: boolean
+  bikeRegistration?: string
+  bikeMake?: string
+  bikeModel?: string
+  /**
+   * Denormalised from rider_documents so dispatch is a single read. Written by
+   * the server on every document change and by the expiry sweep — never set
+   * from a client.
+   */
+  complianceStatus?: 'compliant' | 'pending' | 'blocked'
+  complianceCheckedAt?: string
+  complianceExpiresOn?: string
+  /**
+   * While set and in the future, missing documents warn instead of blocking.
+   * Used to onboard an existing fleet without grounding it overnight. Never
+   * applies to expired or rejected documents.
+   */
+  complianceGraceUntil?: string
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+  version: number
+}
+
+export interface RiderDocument {
+  id: string
+  riderId: string
+  type: string
+  reference?: string
+  issuedOn?: string
+  expiresOn?: string
+  /** R2 key. Never a public URL — these are identity documents. */
+  fileKey?: string
+  fileType?: string
+  status: 'pending' | 'verified' | 'rejected' | 'expired'
+  verifiedBy?: string
+  verifiedAt?: string
+  rejectionReason?: string
+  notes?: string
   createdAt: string
   updatedAt: string
   deletedAt?: string
