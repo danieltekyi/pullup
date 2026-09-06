@@ -132,6 +132,16 @@ FRONTEND_CUSTOMER_URL = "https://pullupcustomer.aegisassetllc.com"
 # API calls, and its own /api/lead is served by Pages Functions, not this Worker.
 ALLOWED_ORIGINS       = "https://pullupadmin.aegisassetllc.com,https://pulluprider.aegisassetllc.com,https://pullupcustomer.aegisassetllc.com,https://pulluppartner.aegisassetllc.com,https://pullupportal.aegisassetllc.com"
 CF_ACCESS_TEAM_DOMAIN = "aegis-dashboard.cloudflareaccess.com"
+# Sender for every transactional email: SLA alerts, compliance warnings, order
+# confirmations.
+#
+# This must be a domain verified with the email provider. It was unset, so
+# sendEmail fell back to no-reply@pullup.aegisassetllc.com — a subdomain that
+# was never registered with Resend, which rejected every message with a 403.
+# The root domain already carries the DKIM, SPF and return-path records Resend
+# needs, so sending from it works today.
+FROM_EMAIL            = "no-reply@aegisassetllc.com"
+NOTIFY_EMAIL          = "info@aegisassetllc.com"
 # One AUD per Access application — a token may carry any of them.
 # admin, rider, api, client portal
 CF_ACCESS_AUD         = "224159b5912326257bc0ee012f7727193e3708631f3e70632fc406c646b90111,b58f3ac228de8f6b297ff74c51a442d6402c8163ef9afebc45f08abf77fa1a81,edaa3f63b88305167a606332d1d01a99266748b6d544e02db344d04e5cbadd40,154ad300de820eeaa6dcf384dd651718512d092374b4223521e0da4f83d91507"
