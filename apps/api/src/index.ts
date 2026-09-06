@@ -19,6 +19,7 @@ import { rateLimit } from './middleware/rateLimit'
 import { slaSweep } from './services/slaWatch'
 import { complianceSweep } from './services/complianceWatch'
 import complianceRouter from './routes/compliance'
+import internalRouter from './routes/internal'
 import partnerPortalRouter from './routes/partnerPortal'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
@@ -82,12 +83,18 @@ app.use('/api/tracker/proxy', rateLimit({ binding: 'RL_PUBLIC' }))
 // Estimate calls the paid Google Distance Matrix API — cap it hard (DEF-006).
 app.use('/api/public/orders/estimate', rateLimit({ binding: 'RL_ESTIMATE' }))
 app.use('/api/public/orders', rateLimit({ binding: 'RL_ORDER_CREATE' }))
+// Throttled despite the shared secret. If the key ever leaks, the ceiling on
+// the damage should be a rate limit rather than our Resend quota.
+app.use('/api/internal/*', rateLimit({ binding: 'RL_ORDER_CREATE' }))
 
 // Public endpoints — no Access needed
 app.route('/api/rider-auth', riderAuthRouter)
 app.route('/api/rider-location', riderLocationRouter)
 app.route('/api/partner-auth', partnerAuthRouter)
 app.route('/api/public', publicOrdersRouter)
+// Service-to-service. Authenticated by a shared secret rather than Access,
+// because the caller is another Worker with no browser and no cookie.
+app.route('/api/internal', internalRouter)
 
 app.route('/api/orders', ordersRouter)
 app.route('/api/compliance', complianceRouter)

@@ -41,6 +41,16 @@ export interface Env {
   SMTP_USER?: string
   SMTP_PASS?: string
   FROM_EMAIL?: string
+  /** Where lead and alert email lands. Set in wrangler.toml [vars]. */
+  NOTIFY_EMAIL?: string
+  /**
+   * Shared secret for service-to-service calls from the marketing site.
+   *
+   * Lets the site relay lead notifications through this Worker instead of
+   * holding a second copy of the Resend credential. Absent means internal
+   * endpoints refuse everything — they never fall open.
+   */
+  INTERNAL_API_KEY?: string
   AT_USERNAME?: string
   AT_API_KEY?: string
   AT_SENDER_ID?: string

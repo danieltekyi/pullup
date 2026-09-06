@@ -18,6 +18,7 @@ import {
 import type { OrderStatus } from '@pullup/shared'
 import { TREND_FORMATS } from '../src/repos/orders'
 import { NOTIFIED_STATUSES } from '../src/services/customerNotify'
+import { secretsMatch, escapeHtml } from '../src/routes/internal'
 
 describe('shared physics', () => {
   it('computes a plausible charge', () => {
@@ -343,5 +344,57 @@ describe('customer lifecycle notifications', () => {
     for (const s of NOTIFIED_STATUSES) {
       expect(Object.keys(ORDER_STATUS_FLOW), `${s} is not a real status`).toContain(s)
     }
+  })
+})
+
+describe('internal endpoint auth', () => {
+  // This comparison is the only thing between the internal endpoints and the
+  // open internet, so it is tested directly rather than by reading the source.
+
+  it('accepts the exact secret', () => {
+    expect(secretsMatch('s3cret-value', 's3cret-value')).toBe(true)
+  })
+
+  it('rejects a wrong secret of the same length', () => {
+    expect(secretsMatch('s3cret-value', 's3cret-valuX')).toBe(false)
+  })
+
+  it('rejects a correct prefix', () => {
+    // The attack a naive === invites: probe one character at a time.
+    expect(secretsMatch('s3cret-value', 's3cret')).toBe(false)
+    expect(secretsMatch('s3cret', 's3cret-value')).toBe(false)
+  })
+
+  it('rejects empty against non-empty', () => {
+    expect(secretsMatch('', 's3cret')).toBe(false)
+    expect(secretsMatch('s3cret', '')).toBe(false)
+  })
+
+  it('compares every character rather than stopping at the first difference', () => {
+    // Same length, differing only in the last character. A short-circuiting
+    // comparison would return sooner here than for an early difference, and
+    // that timing gap is the whole vulnerability.
+    expect(secretsMatch('aaaaaaaaaaaa', 'aaaaaaaaaaab')).toBe(false)
+    expect(secretsMatch('aaaaaaaaaaaa', 'baaaaaaaaaaa')).toBe(false)
+  })
+})
+
+describe('lead relay escaping', () => {
+  it('neutralises HTML from a public form', () => {
+    // Name and message arrive from the website contact form and go straight
+    // into an email body.
+    expect(escapeHtml('<script>alert(1)</script>')).toBe(
+      '&lt;script&gt;alert(1)&lt;/script&gt;',
+    )
+  })
+
+  it('escapes ampersands before anything else', () => {
+    // Getting this order wrong double-escapes: &lt; becomes &amp;lt;.
+    expect(escapeHtml('a & b')).toBe('a &amp; b')
+    expect(escapeHtml('<a href="x">')).toBe('&lt;a href=&quot;x&quot;&gt;')
+  })
+
+  it('leaves ordinary text alone', () => {
+    expect(escapeHtml('Ama Owusu, Osu — 40 drops')).toBe('Ama Owusu, Osu — 40 drops')
   })
 })
