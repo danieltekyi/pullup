@@ -71,3 +71,6 @@ dist-rider/
 dist-customer/
 dist-partner/
 
+
+# Scratch file for multi-line commit messages.
+.commitmsg
