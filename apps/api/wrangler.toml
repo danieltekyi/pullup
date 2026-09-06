@@ -35,6 +35,15 @@ zone_name = "aegisassetllc.com"
 pattern = "pullupportal.aegisassetllc.com/api/*"
 zone_name = "aegisassetllc.com"
 
+# The partner app was the only one of the four without a route. CI builds every
+# app with VITE_API_URL="" — same origin — so a partner's /api/* call fell
+# through to the Pages SPA and came back as index.html instead of JSON. The
+# portal has been showing an empty order list to real partners rather than an
+# error, because HTML where JSON was expected fails quietly.
+[[routes]]
+pattern = "pulluppartner.aegisassetllc.com/api/*"
+zone_name = "aegisassetllc.com"
+
 # --------------------------------------------------------------------
 # Bindings (fill IDs after `wrangler d1 create` / `wrangler r2 bucket create`)
 # --------------------------------------------------------------------
