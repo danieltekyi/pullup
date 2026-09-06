@@ -19,6 +19,7 @@ import { rateLimit } from './middleware/rateLimit'
 import { slaSweep } from './services/slaWatch'
 import { complianceSweep } from './services/complianceWatch'
 import complianceRouter from './routes/compliance'
+import partnerPortalRouter from './routes/partnerPortal'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -90,6 +91,7 @@ app.route('/api/public', publicOrdersRouter)
 
 app.route('/api/orders', ordersRouter)
 app.route('/api/compliance', complianceRouter)
+app.route('/api/partner-portal', partnerPortalRouter)
 app.route('/api/sync', syncRouter)
 app.route('/api/tracker', trackerRouter)
 app.route('/api/riders', ridersRouter)

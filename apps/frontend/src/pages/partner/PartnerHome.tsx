@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Order } from '@pullup/shared'
 import { api, apiErrorMessage } from '../../services/api'
 import { Badge, Button, Card, StatusBadge, toast } from '../../components/ui'
-import { Building2, FileSpreadsheet, LogOut, Package, RefreshCw, Upload } from 'lucide-react'
+import { Building2, FileSpreadsheet, LogOut, Package, RefreshCw, RotateCcw, Upload } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
 export default function PartnerHome() {
@@ -10,7 +10,21 @@ export default function PartnerHome() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
-  const [tab, setTab] = useState<'orders' | 'place'>('orders')
+  const [reordering, setReordering] = useState<string | null>(null)
+  const [tab, setTab] = useState<'orders' | 'place' | 'statement'>('orders')
+
+  async function reorder(o: Order) {
+    setReordering(o.id)
+    try {
+      await api.post('/api/partner-portal/reorder', { orderId: o.id })
+      toast.success('Sent. Dispatch will assign a rider.')
+      load()
+    } catch (err) {
+      toast.error(apiErrorMessage(err))
+    } finally {
+      setReordering(null)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -87,13 +101,13 @@ export default function PartnerHome() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          {(['orders', 'place'] as const).map(t => (
+          {(['orders', 'place', 'statement'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              {t === 'orders' ? '📦 My Orders' : '➕ Place Order'}
+              {t === 'orders' ? 'My Orders' : t === 'place' ? 'Place Order' : 'Statement'}
             </button>
           ))}
         </div>
@@ -162,14 +176,30 @@ export default function PartnerHome() {
                       <span className="text-sm font-semibold text-purple-700">
                         {o.cost ? `GHS ${o.cost.toFixed(2)}` : '—'}
                       </span>
-                      <a
-                        href={`https://pullupcustomer.aegisassetllc.com/track?orderId=${o.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-purple-600 hover:underline font-semibold"
-                      >
-                        Track →
-                      </a>
+                      <div className="flex items-center gap-3">
+                        {/*
+                          Repeat is the point of the portal. Almost every
+                          partner delivery goes somewhere they have sent to
+                          before, and re-keying that in WhatsApp is where both
+                          the errors and the dispatcher's morning go.
+                        */}
+                        <button
+                          onClick={() => reorder(o)}
+                          disabled={reordering === o.id}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-purple-700 disabled:opacity-50"
+                        >
+                          <RotateCcw size={12} className={reordering === o.id ? 'animate-spin' : ''} />
+                          {reordering === o.id ? 'Sending…' : 'Send again'}
+                        </button>
+                        <a
+                          href={`https://pullupcustomer.aegisassetllc.com/track?orderId=${o.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-purple-600 hover:underline font-semibold"
+                        >
+                          Track →
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -179,7 +209,108 @@ export default function PartnerHome() {
         )}
 
         {tab === 'place' && <PartnerOrderForm onOrderPlaced={load} />}
+        {tab === 'statement' && <PartnerStatement />}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Spend, volume and service quality, computed server-side.
+ *
+ * The portal used to total this in the browser from whichever page of orders
+ * had been fetched, so the figures quietly under-reported as soon as a partner
+ * had more history than one page.
+ */
+function PartnerStatement() {
+  const [data, setData] = useState<{
+    totals: { orders: number; spend: number; delivered: number; failed: number; codCollected: number }
+    byMonth: Array<{ label: string; orders: number; spend: number }>
+    byZone: Array<{ zone: string; orders: number; spend: number }>
+  } | null>(null)
+  const [perf, setPerf] = useState<{ onTimeRate: number | null; completed: number; late: number } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/partner-portal/statement'),
+      api.get('/api/partner-portal/performance'),
+    ])
+      .then(([s, p]) => { setData(s.data); setPerf(p.data) })
+      .catch(err => toast.error(apiErrorMessage(err)))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Card><p className="py-8 text-center text-slate-400">Loading…</p></Card>
+  if (!data) return null
+
+  const cedis = (n: number) => `GHS ${Number(n ?? 0).toFixed(2)}`
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="Deliveries" value={String(data.totals.orders ?? 0)} />
+        <Stat label="Total spend" value={cedis(data.totals.spend)} />
+        <Stat label="Completed" value={String(data.totals.delivered ?? 0)} />
+        <Stat
+          label="On time"
+          /* Null rather than a fabricated 100%: with no deadlines recorded
+             there is no rate to report, and inventing one is worse than a dash. */
+          value={perf?.onTimeRate === null || perf?.onTimeRate === undefined ? '—' : `${perf.onTimeRate}%`}
+        />
+      </div>
+
+      {Number(data.totals.codCollected) > 0 && (
+        <Card>
+          <p className="text-sm font-semibold text-slate-500">Cash collected on your behalf</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{cedis(data.totals.codCollected)}</p>
+          <p className="mt-1 text-xs text-slate-400">Reconciled and paid over weekly.</p>
+        </Card>
+      )}
+
+      <Card title="By month">
+        {data.byMonth.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-400">Nothing yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {data.byMonth.map(m => (
+              <div key={m.label} className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">{m.label}</span>
+                <span className="text-slate-400">{m.orders} drops</span>
+                <span className="font-semibold text-slate-900">{cedis(m.spend)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Where your deliveries go">
+        {data.byZone.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-400">Nothing yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {data.byZone.map(z => (
+              <div key={z.zone} className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">{z.zone}</span>
+                <span className="font-semibold text-slate-900">{z.orders}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <p className="px-1 text-xs leading-relaxed text-slate-400">
+        These are running totals from your delivery records. Formal invoices are issued separately.
+      </p>
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-slate-400">{label}</p>
+      <p className="mt-1 text-xl font-bold text-slate-900">{value}</p>
     </div>
   )
 }

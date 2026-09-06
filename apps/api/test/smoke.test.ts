@@ -17,6 +17,7 @@ import {
 } from '@pullup/shared'
 import type { OrderStatus } from '@pullup/shared'
 import { TREND_FORMATS } from '../src/repos/orders'
+import { NOTIFIED_STATUSES } from '../src/services/customerNotify'
 
 describe('shared physics', () => {
   it('computes a plausible charge', () => {
@@ -312,5 +313,35 @@ describe('compliance grace window', () => {
   it('drops the grace flag once it has passed', () => {
     expect(evaluateCompliance([], now, day(5)).graceUntil).toBeTruthy()
     expect(evaluateCompliance([], now, day(-5)).graceUntil).toBeUndefined()
+  })
+})
+describe('customer lifecycle notifications', () => {
+  it('tells the customer at the moments they would otherwise ring us', () => {
+    // Previously exactly one of eleven statuses produced a message. A customer
+    // wondering where their parcel was had no option but to call.
+    for (const s of ['picked_up', 'delivered', 'awaiting_confirmation', 'failed', 'cancelled', 'returned']) {
+      expect(NOTIFIED_STATUSES, `${s} should notify the customer`).toContain(s)
+    }
+  })
+
+  it('stays quiet on statuses a customer cannot act on', () => {
+    // Each SMS costs money in Ghana, and a customer who gets five texts about
+    // one parcel stops reading all of them. "A rider has been allocated" tells
+    // someone nothing useful.
+    expect(NOTIFIED_STATUSES).not.toContain('assigned')
+    expect(NOTIFIED_STATUSES).not.toContain('in_transit')
+    expect(NOTIFIED_STATUSES).not.toContain('confirmed')
+  })
+
+  it('notifies on fewer than half the statuses', () => {
+    // A guard against the list quietly growing until every transition texts.
+    const all = Object.keys(ORDER_STATUS_FLOW).length
+    expect(NOTIFIED_STATUSES.length).toBeLessThan(all / 2 + 1)
+  })
+
+  it('only names statuses that exist in the lifecycle', () => {
+    for (const s of NOTIFIED_STATUSES) {
+      expect(Object.keys(ORDER_STATUS_FLOW), `${s} is not a real status`).toContain(s)
+    }
   })
 })

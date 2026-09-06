@@ -21,6 +21,7 @@ import { sendPushToUser } from '../services/notifications/push'
 import { sendSms } from '../services/notifications/sms'
 import { sendWhatsApp } from '../services/notifications/whatsapp'
 import { saveProof } from '../services/storage/r2'
+import { notifyCustomer } from '../services/customerNotify'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -319,11 +320,13 @@ app.put('/:id/status', requireAuth(), async c => {
   const updated = await updateOrder(c.env, order.id, patch)
   await logOrderEvent(c.env, { orderId: order.id, type: body.status as never, actor: actorFromCtx(c), before, after: updated })
 
-  if (updated.status === 'awaiting_confirmation' && updated.customerPhone) {
-    c.executionCtx.waitUntil(
-      sendSms(c.env, updated.customerPhone, `Your PullUp delivery ${updated.id} has arrived.`).then(() => undefined).catch(() => undefined),
-    )
-  }
+  // Customers used to hear from PullUp at exactly one point in eleven. Anyone
+  // wondering where their parcel was had to ring somebody, which is both the
+  // worst experience and the most expensive way to serve it.
+  c.executionCtx.waitUntil(
+    notifyCustomer(c.env, updated, updated.status).then(() => undefined).catch(() => undefined),
+  )
+
   return c.json(updated)
 })
 
@@ -364,6 +367,14 @@ app.delete('/:id', requireAuth(), async c => {
   if (c.get('user')!.role === 'rider') throw forbidden()
   await softDeleteOrder(c.env, order.id)
   await logOrderEvent(c.env, { orderId: order.id, type: 'cancelled', actor: actorFromCtx(c), before: order })
+  // A customer expecting a parcel that is quietly deleted rings us. Only worth
+  // saying once the delivery was already in motion — nobody needs a text about
+  // an order cancelled minutes after it was raised.
+  if (order.status !== 'pending') {
+    c.executionCtx.waitUntil(
+      notifyCustomer(c.env, order, 'cancelled').then(() => undefined).catch(() => undefined),
+    )
+  }
   return c.json({ ok: true })
 })
 
