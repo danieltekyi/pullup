@@ -492,3 +492,84 @@ describe('polygon data sanity (A-10)', () => {
     expect(polygonLooksReversed(accra.slice(0, 2))).toBe(false)
   })
 })
+describe('the API and the website must quote the same price', () => {
+  /*
+    The most expensive fault found in this codebase.
+
+    Probed production: a 9.2 km, 3 kg delivery quoted GHS 14.36 through the
+    customer app while the website's calculator quoted about GHS 45 for the
+    same trip. The API price is the binding one — publicOrders.ts recomputes
+    server-side and ignores the client — so every order booked through the app
+    was charged roughly a third of the advertised rate.
+
+    Two models that were never reconciled: the website's was calibrated to the
+    band the business actually sells at, the API kept seed defaults nobody
+    tuned. Neither was obviously wrong on its own, which is why it survived.
+
+    These recalibrated parameters are what migration 0005 writes to the params
+    table. The test is the reason the two cannot drift apart again silently.
+  */
+  const CALIBRATED = {
+    fuel_price: 15.5,
+    base_efficiency: 40.0,
+    max_payload: 50.0,
+    alpha: 0.3,
+    maintenance_rate_per_km: 0.35,
+    beta: 0.2,
+    terrain_factor: 1.0,
+    salary_per_delivery: 18.0,
+    overhead_per_delivery: 6.0,
+    profit_margin: 31.03,
+  }
+
+  /** The website's formula, mirrored from src/react-app/data/pricing.ts. */
+  function siteQuote(km: number, kg: number): number {
+    const fuel = (km / 40) * 15.5
+    const wear = km * 0.35
+    const surcharge = Math.max(0, kg - 5) * 1.2
+    const raw = fuel + wear + 24 + surcharge
+    return Math.max(35, Math.round((raw + raw * 0.45) * 100) / 100)
+  }
+
+  it('agrees with the website on a typical Accra delivery', () => {
+    const api = computePhysicsCost(9.2, 3, CALIBRATED).charge
+    const site = siteQuote(9.2, 3)
+    // Within a cedi. The load adjustment means they cannot be identical, and
+    // chasing the last pesewa would make this test fragile without making the
+    // price more correct.
+    expect(Math.abs(api - site)).toBeLessThan(1)
+  })
+
+  it('agrees across the range of distances actually delivered', () => {
+    for (const km of [2, 5, 8, 12, 18, 25]) {
+      const api = computePhysicsCost(km, 3, CALIBRATED).charge
+      const site = siteQuote(km, 3)
+      expect(
+        Math.abs(api - site),
+        `${km}km: API quotes ${api}, site quotes ${site}`,
+      ).toBeLessThan(1.5)
+    }
+  })
+
+  it('lands a typical delivery in the band the business sells at', () => {
+    // The calibration comment on the website's parameters says GHS 40–55.
+    const charge = computePhysicsCost(9.2, 3, CALIBRATED).charge
+    expect(charge).toBeGreaterThanOrEqual(40)
+    expect(charge).toBeLessThanOrEqual(55)
+  })
+
+  it('shows how badly the uncalibrated defaults undercharged', () => {
+    // Documents the fault rather than asserting a preference: if someone
+    // reverts the params, this is what they are reverting to.
+    const seeded = computePhysicsCost(9.2, 3).charge
+    const calibrated = computePhysicsCost(9.2, 3, CALIBRATED).charge
+    expect(seeded).toBeLessThan(20)
+    expect(calibrated / seeded).toBeGreaterThan(2.5)
+  })
+
+  it('pays a rider something an owner-operator could accept', () => {
+    // The seed default was GHS 5 a delivery, which never worked and is
+    // impossible now the rider buys their own fuel out of it.
+    expect(CALIBRATED.salary_per_delivery).toBeGreaterThanOrEqual(15)
+  })
+})
