@@ -1,0 +1,64 @@
+name: Query the database (read only)
+
+# Companion to migrate.yml. That workflow exists to change the database; this
+# one exists to look at it, which is the far more common need and was the thing
+# that sent me back to a laptop every time.
+#
+# Refuses anything that is not a SELECT. Not because a determined person could
+# not defeat a keyword check, but because the failure this guards against is a
+# tired person pasting an UPDATE into the wrong box — and for that a plain
+# refusal is exactly enough. Anything that writes belongs in a migration file
+# where it is reviewed, committed and repeatable.
+#
+#   gh workflow run query.yml -f sql="SELECT COUNT(*) FROM orders"
+
+on:
+  workflow_dispatch:
+    inputs:
+      sql:
+        description: 'A SELECT statement'
+        required: true
+        type: string
+
+jobs:
+  query:
+    name: Run query
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Refuse anything that writes
+        env:
+          SQL: ${{ inputs.sql }}
+        run: |
+          # Via env rather than interpolated into the script, so a quote in the
+          # input cannot break out of the shell.
+          normalised=$(printf '%s' "$SQL" | tr '[:upper:]' '[:lower:]')
+
+          case "$normalised" in
+            select*|with*) ;;
+            *) echo "::error::Only SELECT (or WITH ... SELECT) is allowed here."; exit 1 ;;
+          esac
+
+          for word in insert update delete drop alter create replace attach pragma vacuum; do
+            if printf '%s' "$normalised" | grep -qw "$word"; then
+              echo "::error::'$word' is not allowed. Changes belong in a migration file."
+              exit 1
+            fi
+          done
+
+          echo "Query accepted."
+
+      - name: Run
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          wranglerVersion: '4.36.0'
+          command: d1 execute pullup --remote --command "${{ inputs.sql }}"
