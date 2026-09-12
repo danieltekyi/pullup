@@ -1,0 +1,92 @@
+name: Apply a D1 migration
+
+# CI deploys the Worker but has never run migrations, so schema changes have
+# always been applied by hand from a laptop. That held until the local
+# Cloudflare credential expired with a live pricing fault waiting to be fixed —
+# and there was no second way to reach the database.
+#
+# Deliberately manual rather than automatic on push. `wrangler d1 migrations
+# apply` tracks what it has run in a d1_migrations table, and this database has
+# none: every migration to date was applied with `d1 execute --file`. Running
+# the tracked command now would replay 0001 onwards, and while most are written
+# with IF NOT EXISTS or INSERT OR IGNORE, 0003 and 0004 use ALTER TABLE ADD
+# COLUMN, which fails on a column that already exists. Choosing the file
+# explicitly avoids guessing which of them are safe to repeat.
+#
+# Run it with:
+#   gh workflow run migrate.yml -f file=0005_recalibrate_pricing.sql
+#
+# Or from the Actions tab. The dry run prints the SQL and touches nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'Migration filename in apps/api/src/db/migrations'
+        required: true
+        type: string
+      dry_run:
+        description: 'Print the SQL without applying it'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # One at a time. Two concurrent migrations against the same database is a
+  # problem nobody wants to debug afterwards.
+  group: d1-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Apply ${{ inputs.file }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Check the file exists
+        working-directory: apps/api
+        run: |
+          # A typo would otherwise reach wrangler and fail with something less
+          # obvious than "that file is not there".
+          path="src/db/migrations/${{ inputs.file }}"
+          if [ ! -f "$path" ]; then
+            echo "::error::No such migration: $path"
+            echo "Available:"
+            ls -1 src/db/migrations
+            exit 1
+          fi
+          echo "Applying $path"
+
+      - name: Show the SQL
+        working-directory: apps/api
+        run: |
+          echo '--- SQL to be applied ---'
+          cat "src/db/migrations/${{ inputs.file }}"
+
+      - name: Apply
+        if: ${{ !inputs.dry_run }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          wranglerVersion: '4.36.0'
+          command: d1 execute pullup --remote --file=src/db/migrations/${{ inputs.file }}
+
+      - name: Read back the physics parameters
+        if: ${{ !inputs.dry_run }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          wranglerVersion: '4.36.0'
+          # Printed so the run itself is the evidence the change landed, rather
+          # than a green tick that only proves the command exited zero.
+          command: d1 execute pullup --remote --command "SELECT key, value FROM params WHERE category='physics' ORDER BY key"
