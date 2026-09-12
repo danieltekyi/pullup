@@ -63,6 +63,17 @@ bucket_name = "pullup-proof"
 binding = "KV"
 id = "dc4829795aff4c8fb8bdc7413b78e1c1"
 
+# The marketing site's KV, read-only in practice.
+#
+# The site writes an `unnotified:` marker when an enquiry could not be passed to
+# anyone. Pages Functions have no cron, so nothing on that side can ever notice
+# the marker — it would sit there being durable and unread, which is only
+# marginally better than the log line it replaced. Binding it here lets the
+# sweep that already runs surface it.
+[[kv_namespaces]]
+binding = "SITE_KV"
+id = "e1e3349adfc245d7af6ea430e34ea1f0"
+
 # --------------------------------------------------------------------
 # Rate limiting (DEF-002)
 # --------------------------------------------------------------------

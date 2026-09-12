@@ -7,6 +7,7 @@ import { sendSms } from '../services/notifications/sms'
 import { sendEmail } from '../services/notifications/email'
 import { computePhysicsCost } from '@pullup/shared'
 import { loadPhysicsParams } from '../lib/physicsPricing'
+import { predictEta } from '../services/etaPredict'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -85,6 +86,15 @@ app.get('/orders/estimate', async c => {
     etaMinutes = Math.round((distanceKm / 25) * 60 + 10) // 25 km/h average + 10 min pickup
   }
 
+  // History beats the formula once there is enough of it. Until then this
+  // returns the formula's own answer unchanged, so the quote does not shift
+  // under customers while the data accumulates.
+  const eta = await predictEta(c.env, {
+    destinationZone: c.req.query('zone'),
+    fallbackMinutes: etaMinutes!,
+  })
+  etaMinutes = eta.minutes
+
   const etaText = etaMinutes! < 60
     ? `~${etaMinutes} min`
     : `~${Math.floor(etaMinutes! / 60)}h ${etaMinutes! % 60}min`
@@ -98,6 +108,8 @@ app.get('/orders/estimate', async c => {
     currency: 'GHS',
     etaMinutes: etaMinutes,
     etaText,
+    // Surfaced so the console can tell a measured estimate from a modelled one.
+    etaSource: eta.source,
     usingRoadDistance,
     breakdown: {
       fuelCost: breakdown.fuelCost,

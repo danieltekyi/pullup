@@ -7,6 +7,14 @@ export interface Env {
   DB: D1Database
   PROOF_BUCKET: R2Bucket
   KV: KVNamespace
+  /**
+   * The marketing site's KV namespace.
+   *
+   * Read so the cron can surface enquiries the site could not pass to anyone.
+   * Pages Functions have no scheduled trigger, so nothing on that side can
+   * notice its own failure.
+   */
+  SITE_KV?: KVNamespace
 
   // Native rate limiting bindings — see [[ratelimits]] in wrangler.toml.
   // Optional so local dev and older deployments keep working (fails open).

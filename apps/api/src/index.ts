@@ -20,6 +20,7 @@ import { slaSweep } from './services/slaWatch'
 import { complianceSweep } from './services/complianceWatch'
 import { housekeepingSweep } from './services/housekeeping'
 import { maybeSendDailyDigest } from './services/dailyDigest'
+import { unnotifiedLeadSweep } from './services/leadSweep'
 import complianceRouter from './routes/compliance'
 import internalRouter from './routes/internal'
 import partnerPortalRouter from './routes/partnerPortal'
@@ -120,5 +121,6 @@ export default {
     ctx.waitUntil(complianceSweep(env).then(() => undefined).catch(err => console.error('compliance sweep cron failed', err)))
     ctx.waitUntil(housekeepingSweep(env).then(() => undefined).catch(err => console.error('housekeeping cron failed', err)))
     ctx.waitUntil(maybeSendDailyDigest(env).then(() => undefined).catch(err => console.error('daily digest cron failed', err)))
+    ctx.waitUntil(unnotifiedLeadSweep(env).then(() => undefined).catch(err => console.error('lead sweep cron failed', err)))
   },
 }

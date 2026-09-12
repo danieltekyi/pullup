@@ -14,6 +14,7 @@ import { fetchAllActivePartners } from '../services/partnerFetch'
 import { vapidPublicKey } from '../services/notifications/push'
 import { loadPhysicsParams } from '../lib/physicsPricing'
 import { riderPayouts, codOutstandingByRider } from '../repos/payouts'
+import { etaAccuracy } from '../services/etaPredict'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -206,6 +207,11 @@ app.get('/finance/payouts', requireAuth(), requireRole('super-admin', 'manager')
 app.get('/finance/cod', requireAuth(), requireRole('super-admin', 'manager'), async c => {
   const b = getBranchFilter(c)
   return c.json(await codOutstandingByRider(c.env, b === '__ALL__' ? undefined : b))
+})
+
+/** How the ETA formula is performing, and which zones have enough history. */
+app.get('/analytics/eta', requireAuth(), requireRole('super-admin', 'manager'), async c => {
+  return c.json(await etaAccuracy(c.env))
 })
 
 // -------- push notifications --------
