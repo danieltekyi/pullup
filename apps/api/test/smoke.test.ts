@@ -14,6 +14,11 @@ import {
   documentSpec,
   DOCUMENT_SPECS,
   REQUIRED_DOCUMENT_TYPES,
+  pointInPolygon,
+  parsePolygon,
+  zoneForPoint,
+  looksLikeGhana,
+  polygonLooksReversed,
 } from '@pullup/shared'
 import type { OrderStatus } from '@pullup/shared'
 import { TREND_FORMATS } from '../src/repos/orders'
@@ -396,5 +401,94 @@ describe('lead relay escaping', () => {
 
   it('leaves ordinary text alone', () => {
     expect(escapeHtml('Ama Owusu, Osu — 40 drops')).toBe('Ama Owusu, Osu — 40 drops')
+  })
+})
+describe('zone from coordinates (A-10)', () => {
+  // A square around central Accra, in {lat,lng}.
+  const square = [
+    { lat: 5.55, lng: -0.25 },
+    { lat: 5.65, lng: -0.25 },
+    { lat: 5.65, lng: -0.15 },
+    { lat: 5.55, lng: -0.15 },
+  ]
+
+  it('places a point inside', () => {
+    expect(pointInPolygon({ lat: 5.6, lng: -0.2 }, square)).toBe(true)
+  })
+
+  it('places a point outside', () => {
+    expect(pointInPolygon({ lat: 5.9, lng: -0.2 }, square)).toBe(false)
+    expect(pointInPolygon({ lat: 5.6, lng: -0.4 }, square)).toBe(false)
+  })
+
+  it('refuses a shape that is not a polygon', () => {
+    expect(pointInPolygon({ lat: 5.6, lng: -0.2 }, [])).toBe(false)
+    expect(pointInPolygon({ lat: 5.6, lng: -0.2 }, square.slice(0, 2))).toBe(false)
+  })
+
+  it('does not double-count a vertex level with the point', () => {
+    // The classic ray-casting bug: a ray passing exactly through a vertex
+    // crosses two edges and flips the answer twice, reporting inside as
+    // outside.
+    expect(pointInPolygon({ lat: 5.55, lng: -0.2 }, square)).toBe(true)
+  })
+
+  it('reads GeoJSON longitude-first ordering', () => {
+    // [lng, lat] is the opposite of how everyone says it aloud, and therefore
+    // the most likely thing to be entered wrong by hand.
+    const parsed = parsePolygon(JSON.stringify([[-0.25, 5.55], [-0.25, 5.65], [-0.15, 5.65]]))
+    expect(parsed).toHaveLength(3)
+    expect(parsed[0].lat).toBeCloseTo(5.55)
+    expect(parsed[0].lng).toBeCloseTo(-0.25)
+  })
+
+  it('reads plain lat/lng objects too', () => {
+    const parsed = parsePolygon(JSON.stringify(square))
+    expect(parsed).toHaveLength(4)
+    expect(parsed[0].lat).toBeCloseTo(5.55)
+  })
+
+  it('survives whatever is actually in the column', () => {
+    // The polygon column is free-form TEXT that no code has ever written, so
+    // anything in it arrived by hand.
+    expect(parsePolygon(null)).toEqual([])
+    expect(parsePolygon('')).toEqual([])
+    expect(parsePolygon('not json at all')).toEqual([])
+    expect(parsePolygon('{"nope":1}')).toEqual([])
+  })
+
+  it('names the zone a point falls in', () => {
+    const zones = [
+      { name: 'Central Accra', polygon: square },
+      { name: 'Tema', polygon: [{ lat: 5.6, lng: 0.0 }, { lat: 5.7, lng: 0.0 }, { lat: 5.7, lng: 0.1 }, { lat: 5.6, lng: 0.1 }] },
+    ]
+    expect(zoneForPoint({ lat: 5.6, lng: -0.2 }, zones)).toBe('Central Accra')
+    expect(zoneForPoint({ lat: 5.65, lng: 0.05 }, zones)).toBe('Tema')
+    expect(zoneForPoint({ lat: 8.0, lng: -1.0 }, zones)).toBeUndefined()
+  })
+})
+describe('polygon data sanity (A-10)', () => {
+  const accra = [
+    { lat: 5.55, lng: -0.25 },
+    { lat: 5.65, lng: -0.25 },
+    { lat: 5.65, lng: -0.15 },
+    { lat: 5.55, lng: -0.15 },
+  ]
+
+  it('accepts a polygon that is actually in Ghana', () => {
+    expect(polygonLooksReversed(accra)).toBe(false)
+    expect(accra.every(looksLikeGhana)).toBe(true)
+  })
+
+  it('spots a polygon stored with the pair the wrong way round', () => {
+    // Without this the points land in the Gulf of Guinea, every order falls
+    // outside every zone, and it reads as "zones do not work" rather than
+    // "that one row is reversed".
+    const reversed = accra.map(p => ({ lat: p.lng, lng: p.lat }))
+    expect(polygonLooksReversed(reversed)).toBe(true)
+  })
+
+  it('does not cry wolf on too few points to judge', () => {
+    expect(polygonLooksReversed(accra.slice(0, 2))).toBe(false)
   })
 })

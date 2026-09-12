@@ -22,6 +22,7 @@ import { sendSms } from '../services/notifications/sms'
 import { sendWhatsApp } from '../services/notifications/whatsapp'
 import { saveProof } from '../services/storage/r2'
 import { notifyCustomer } from '../services/customerNotify'
+import { suggestRiders } from '../services/dispatchSuggest'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -359,6 +360,23 @@ app.put('/:id/reject', requireAuth(), async c => {
   await logOrderEvent(c.env, { orderId: order.id, type: 'rejected', actor: actorFromCtx(c), before, after: updated })
   if (order.partnerId) c.executionCtx.waitUntil(notifyPartner(c.env, order, 'rejected'))
   return c.json(updated)
+})
+
+/**
+ * Who should take this delivery, ranked.
+ *
+ * A suggestion rather than an assignment: at this fleet size the dispatcher
+ * knows things the database does not, and a list they can override is more
+ * useful than a decision they have to undo.
+ */
+app.get('/:id/suggest-riders', requireAuth(), async c => {
+  const order = await findOrder(c.env, c.req.param('id'))
+  if (!order) throw notFound()
+  if (c.get('user')!.role === 'rider') throw forbidden('managers only')
+  const b = getBranchFilter(c)
+  return c.json({
+    suggestions: await suggestRiders(c.env, order, b === '__ALL__' ? undefined : b),
+  })
 })
 
 app.delete('/:id', requireAuth(), async c => {

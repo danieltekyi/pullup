@@ -13,6 +13,7 @@ import { financeSummary } from '../repos/finance'
 import { fetchAllActivePartners } from '../services/partnerFetch'
 import { vapidPublicKey } from '../services/notifications/push'
 import { loadPhysicsParams } from '../lib/physicsPricing'
+import { riderPayouts, codOutstandingByRider } from '../repos/payouts'
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -190,6 +191,21 @@ app.get('/analytics/sla', requireAuth(), async c => {
     breached: breached.map(slim),
     atRisk: atRisk.map(slim),
   })
+})
+
+/** Riders and what each is owed for a period. */
+app.get('/finance/payouts', requireAuth(), requireRole('super-admin', 'manager'), async c => {
+  const b = getBranchFilter(c)
+  const to = c.req.query('to') ?? new Date().toISOString()
+  // A week back by default: the interval riders are actually paid on.
+  const from = c.req.query('from') ?? new Date(Date.now() - 7 * 86_400_000).toISOString()
+  return c.json(await riderPayouts(c.env, from, to, b === '__ALL__' ? undefined : b))
+})
+
+/** Cash collected and not yet banked, by rider and by age. */
+app.get('/finance/cod', requireAuth(), requireRole('super-admin', 'manager'), async c => {
+  const b = getBranchFilter(c)
+  return c.json(await codOutstandingByRider(c.env, b === '__ALL__' ? undefined : b))
 })
 
 // -------- push notifications --------

@@ -18,6 +18,8 @@ import adminRouter, { scheduledPartnerFetch } from './routes/admin'
 import { rateLimit } from './middleware/rateLimit'
 import { slaSweep } from './services/slaWatch'
 import { complianceSweep } from './services/complianceWatch'
+import { housekeepingSweep } from './services/housekeeping'
+import { maybeSendDailyDigest } from './services/dailyDigest'
 import complianceRouter from './routes/compliance'
 import internalRouter from './routes/internal'
 import partnerPortalRouter from './routes/partnerPortal'
@@ -116,5 +118,7 @@ export default {
     ctx.waitUntil(scheduledPartnerFetch(env).then(() => undefined).catch(err => console.error('partner fetch cron failed', err)))
     ctx.waitUntil(slaSweep(env).then(() => undefined).catch(err => console.error('sla sweep cron failed', err)))
     ctx.waitUntil(complianceSweep(env).then(() => undefined).catch(err => console.error('compliance sweep cron failed', err)))
+    ctx.waitUntil(housekeepingSweep(env).then(() => undefined).catch(err => console.error('housekeeping cron failed', err)))
+    ctx.waitUntil(maybeSendDailyDigest(env).then(() => undefined).catch(err => console.error('daily digest cron failed', err)))
   },
 }

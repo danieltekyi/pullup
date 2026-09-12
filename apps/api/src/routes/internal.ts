@@ -67,6 +67,8 @@ const leadSchema = z.object({
   bike: z.string().max(40).optional(),
   message: z.string().max(2000).optional(),
   receivedAt: z.string().max(40).optional(),
+  /** Also send the enquirer an acknowledgement. */
+  acknowledge: z.boolean().optional(),
 })
 
 app.post('/lead-notify', async c => {
@@ -118,6 +120,42 @@ app.post('/lead-notify', async c => {
   if (!result.ok) {
     console.error('LEAD RELAY COULD NOT SEND —', result.error ?? result.status ?? 'unknown')
     return c.json({ ok: false, reason: 'send failed' }, 502)
+  }
+
+  /*
+    Acknowledge the enquirer.
+
+    Sent after the internal notification and never allowed to fail the request:
+    telling the business is what must not be lost, and an acknowledgement that
+    did not arrive is a disappointment rather than a lost lead.
+
+    Says only what is already public. No price, no commitment, nothing that
+    commits PullUp to terms before a person has read the enquiry.
+  */
+  if (lead.acknowledge && lead.email) {
+    const isRider = lead.kind === 'rider'
+    const ack = await sendEmail(c.env, {
+      to: lead.email,
+      subject: isRider ? 'We have your application — PullUp' : 'We have your enquiry — PullUp',
+      html: `<div style="font-family:system-ui,sans-serif;color:#0B1020;max-width:520px">
+        <h2 style="font:700 19px system-ui;margin:0 0 10px">Thanks, ${escapeHtml(lead.name.split(' ')[0])}.</h2>
+        <p style="font:15px/1.65 system-ui;margin:0 0 14px">
+          ${isRider
+            ? 'Your application is with us. We read every one properly rather than filtering on keywords, and we will call you on the number you gave us within a week.'
+            : 'Your enquiry is with the dispatch desk. Someone reads every one, and we will come back to you with a real number — usually the same working day.'}
+        </p>
+        <p style="font:15px/1.65 system-ui;margin:0 0 14px">
+          If it is urgent, don't wait on this: call or WhatsApp
+          <a href="https://wa.me/233544736481" style="color:#C2410C">+233 54 473 6481</a>.
+        </p>
+        <p style="font:13px/1.6 system-ui;color:#5A6070;margin:20px 0 0;border-top:1px solid #E6E8EC;padding-top:14px">
+          PullUp is operated by SwiftDrop LTD, Accra.<br>
+          You are getting this because you contacted us at pullup.aegisassetllc.com. We do not add enquirers to a mailing list.
+        </p>
+      </div>`,
+    }).catch(() => ({ ok: false }))
+
+    if (!ack.ok) console.warn('lead acknowledgement not delivered to', lead.email)
   }
 
   return c.json({ ok: true })
